@@ -33,7 +33,20 @@ else if (import.meta.env && import.meta.env.VITE_FIREBASE_API_KEY) {
 const hasValidConfig = config && config.apiKey;
 
 if (!hasValidConfig) {
-  console.warn("⚠️ Firebase configuration missing in Admin App!");
+  console.warn(
+    "⚠️ Firebase configuration is missing in Admin App! Local development requires a .env file.\n" +
+    "Please create a .env file in the admin directory with your Firebase config."
+  );
+
+  // Use a placeholder config to prevent immediate initialization crash on local startup.
+  config = {
+    apiKey: "placeholder-api-key-for-admin-development",
+    authDomain: "placeholder-auth-domain",
+    projectId: "placeholder-project-id",
+    storageBucket: "placeholder-storage-bucket",
+    messagingSenderId: "placeholder-messaging-sender-id",
+    appId: "placeholder-app-id"
+  };
 }
 
 export { config as firebaseConfig };
