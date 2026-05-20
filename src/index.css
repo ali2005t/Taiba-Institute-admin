@@ -1,0 +1,258 @@
+@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800;900&family=Tajawal:wght@300;400;500;700;900&display=swap');
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  /* Ultra-Premium High legibility Dark Mode & Light Mode Tokens */
+  --janzari-deep: #0f172a;      /* Deep Space Navy */
+  --janzari-medium: #1e293b;    /* Medium Space Slate */
+  --janzari-light: #38bdf8;     /* Sky Cyan Accent */
+  
+  --gold-accent: #10b981;       /* Vibrant Neon Emerald */
+  --gold-dark: #065f46;         
+  --gold-glow: rgba(16, 185, 129, 0.25);
+
+  --pistachio-mint: #34d399;    /* Mint Accent */
+  --pistachio-deep: #064e3b;
+
+  --bg-dark-gradient: linear-gradient(135deg, #020617 0%, #0f172a 100%); /* Deep space black/indigo background */
+  --bg-light-gradient: linear-gradient(135deg, #f8fafc 0%, #e2eedc 100%);
+
+  --card-dark: rgba(15, 23, 42, 0.85); /* distinct high contrast space slate cards */
+  --card-light: rgba(255, 255, 255, 0.98);
+
+  --text-dark: #f8fafc; /* Crisp highly legible slate white */
+  --text-light: #0f172a;
+}
+
+body {
+  font-family: 'Cairo', 'Tajawal', sans-serif;
+  direction: rtl;
+  overflow-x: hidden;
+  background: var(--bg-dark-gradient);
+  color: var(--text-dark);
+  transition: background-color 0.4s ease, color 0.4s ease;
+}
+
+body.light {
+  background: var(--bg-light-gradient);
+  color: var(--text-light);
+}
+
+/* Master Glassmorphism Container with Space/Slate Glow Border */
+.admin-card {
+  background: var(--card-dark);
+  backdrop-filter: blur(25px);
+  -webkit-backdrop-filter: blur(25px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 15px 35px -10px rgba(0, 0, 0, 0.7),
+              inset 0 1px 1px rgba(255, 255, 255, 0.05);
+  border-radius: 24px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.light .admin-card {
+  background: var(--card-light);
+  border: 1px solid rgba(14, 94, 111, 0.12);
+  box-shadow: 0 15px 35px -10px rgba(14, 94, 111, 0.08),
+              inset 0 1px 2px rgba(255, 255, 255, 0.8);
+}
+
+/* Floating Sidebar Navigation Styles */
+.sidebar-panel {
+  background: rgba(15, 23, 42, 0.95);
+  border-left: 1px solid rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(15px);
+}
+
+.light .sidebar-panel {
+  background: rgba(255, 255, 255, 0.9);
+  border-left: 1px solid rgba(14, 94, 111, 0.1);
+}
+
+/* Elegant Sidebar Tab Buttons */
+.sidebar-btn {
+  position: relative;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  color: rgba(240, 247, 244, 0.7);
+  border-radius: 14px;
+}
+
+.light .sidebar-btn {
+  color: rgba(12, 45, 51, 0.7);
+}
+
+.sidebar-btn:hover {
+  background: rgba(26, 142, 158, 0.1);
+  color: #ffffff;
+  transform: translateX(-4px);
+}
+
+.light .sidebar-btn:hover {
+  background: rgba(14, 94, 111, 0.06);
+  color: var(--janzari-medium);
+}
+
+.sidebar-btn.active {
+  background: linear-gradient(90deg, rgba(191, 235, 212, 0.15) 0%, rgba(23, 138, 158, 0.2) 100%);
+  color: var(--gold-accent);
+  border-right: 4px solid var(--gold-accent);
+  box-shadow: inset 0 0 12px rgba(191, 235, 212, 0.1);
+}
+
+.light .sidebar-btn.active {
+  background: linear-gradient(90deg, rgba(14, 94, 111, 0.06) 0%, rgba(191, 235, 212, 0.2) 100%);
+  color: var(--janzari-medium);
+  border-right: 4px solid var(--janzari-medium);
+  box-shadow: none;
+}
+
+/* Premium Curved Admin Buttons */
+.btn-gold {
+  background: linear-gradient(135deg, #bfebd4 0%, #a3d9bc 100%);
+  color: #072327;
+  box-shadow: 0 4px 15px rgba(191, 235, 212, 0.25);
+  transition: all 0.25s ease;
+}
+.btn-gold:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(191, 235, 212, 0.4);
+}
+
+.btn-teal {
+  background: linear-gradient(135deg, var(--janzari-medium) 0%, var(--janzari-light) 100%);
+  color: #ffffff;
+  box-shadow: 0 4px 15px rgba(14, 94, 111, 0.25);
+  transition: all 0.25s ease;
+}
+.btn-teal:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(14, 94, 111, 0.4);
+}
+
+.btn-rose {
+  background: linear-gradient(135deg, #e11d48 0%, #be123c 100%);
+  color: #ffffff;
+  box-shadow: 0 4px 15px rgba(225, 29, 72, 0.25);
+  transition: all 0.25s ease;
+}
+.btn-rose:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(225, 29, 72, 0.4);
+}
+
+/* Academic Custom Form Controls */
+.admin-input {
+  background: rgba(5, 20, 23, 0.7);
+  border: 1.5px solid rgba(191, 235, 212, 0.2);
+  color: #ffffff;
+  transition: all 0.25s ease;
+  border-radius: 14px;
+}
+.admin-input:focus {
+  border-color: var(--gold-accent);
+  box-shadow: 0 0 10px var(--gold-glow);
+  outline: none;
+}
+
+.light .admin-input {
+  background: rgba(255, 255, 255, 0.9);
+  border: 1.5px solid rgba(14, 94, 111, 0.25);
+  color: var(--text-light);
+}
+.light .admin-input:focus {
+  border-color: var(--janzari-medium);
+  box-shadow: 0 0 10px rgba(14, 94, 111, 0.15);
+}
+
+/* Beautiful Rounded Table Setup */
+.admin-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0 8px;
+}
+
+.admin-table tr {
+  transition: all 0.2s ease;
+}
+
+.admin-table tbody tr {
+  background: rgba(30, 41, 59, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+}
+
+.light .admin-table tbody tr {
+  background: rgba(255, 255, 255, 0.6);
+  box-shadow: 0 4px 10px rgba(14, 94, 111, 0.03);
+}
+
+.admin-table tbody tr:hover {
+  transform: scale(1.005);
+  background: rgba(51, 65, 85, 0.65);
+  box-shadow: 0 6px 15px rgba(0, 0, 0, 0.35);
+}
+
+.light .admin-table tbody tr:hover {
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 6px 15px rgba(14, 94, 111, 0.06);
+}
+
+.admin-table td, .admin-table th {
+  padding: 16px;
+}
+
+.admin-table td:first-child, .admin-table th:first-child {
+  border-top-right-radius: 16px;
+  border-bottom-right-radius: 16px;
+}
+
+.admin-table td:last-child, .admin-table th:last-child {
+  border-top-left-radius: 16px;
+  border-bottom-left-radius: 16px;
+}
+
+/* Typography styles */
+.gradient-text-gold {
+  background: linear-gradient(135deg, #ffe596 0%, var(--gold-accent) 50%, #c49635 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.light .gradient-text-gold {
+  background: linear-gradient(135deg, var(--janzari-deep) 0%, var(--janzari-medium) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.fade-in {
+  animation: fadeIn 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Seamless Infinite Marquee CSS Animation */
+@keyframes marquee-seamless-left {
+  0% { transform: translate3d(0, 0, 0); }
+  100% { transform: translate3d(-50%, 0, 0); }
+}
+
+@keyframes marquee-seamless-right {
+  0% { transform: translate3d(-50%, 0, 0); }
+  100% { transform: translate3d(0, 0, 0); }
+}
+
+.animate-marquee-left {
+  display: flex;
+  width: max-content;
+  animation: marquee-seamless-left 55s linear infinite;
+}
+
+.animate-marquee-right {
+  display: flex;
+  width: max-content;
+  animation: marquee-seamless-right 55s linear infinite;
+}
