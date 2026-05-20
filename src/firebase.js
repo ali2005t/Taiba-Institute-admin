@@ -5,21 +5,32 @@ import { getStorage } from 'firebase/storage';
 
 let config = {};
 
+// 1. Try to get config from injected global __firebase_config
 if (typeof __firebase_config !== 'undefined') {
   try {
-    config = typeof __firebase_config === 'string' ? JSON.parse(__firebase_config) : __firebase_config;
+    const parsedConfig = typeof __firebase_config === 'string' ? JSON.parse(__firebase_config) : __firebase_config;
+    if (parsedConfig && parsedConfig.apiKey) {
+      config = parsedConfig;
+    }
   } catch (e) {
     console.error("Failed to parse __firebase_config global:", e);
   }
 }
-else if (import.meta.env && import.meta.env.VITE_FIREBASE_CONFIG) {
+
+// 2. Fallback to VITE_FIREBASE_CONFIG env variable
+if (!config.apiKey && import.meta.env && import.meta.env.VITE_FIREBASE_CONFIG) {
   try {
-    config = JSON.parse(import.meta.env.VITE_FIREBASE_CONFIG);
+    const parsedConfig = JSON.parse(import.meta.env.VITE_FIREBASE_CONFIG);
+    if (parsedConfig && parsedConfig.apiKey) {
+      config = parsedConfig;
+    }
   } catch (e) {
     console.error("Failed to parse VITE_FIREBASE_CONFIG env variable:", e);
   }
 }
-else if (import.meta.env && import.meta.env.VITE_FIREBASE_API_KEY) {
+
+// 3. Fallback to individual Vite environment variables
+if (!config.apiKey && import.meta.env && import.meta.env.VITE_FIREBASE_API_KEY) {
   config = {
     apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
     authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
