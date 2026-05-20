@@ -45,18 +45,17 @@ const hasValidConfig = config && config.apiKey;
 
 if (!hasValidConfig) {
   console.warn(
-    "⚠️ Firebase configuration is missing in Admin App! Local development requires a .env file.\n" +
-    "Please create a .env file in the admin directory with your Firebase config."
+    "⚠️ Firebase configuration was not found in environment variables! Using fallback configuration."
   );
 
-  // Use a placeholder config to prevent immediate initialization crash on local startup.
+  // Use actual configuration as fallback if env variables are missing during build
   config = {
-    apiKey: "placeholder-api-key-for-admin-development",
-    authDomain: "placeholder-auth-domain",
-    projectId: "placeholder-project-id",
-    storageBucket: "placeholder-storage-bucket",
-    messagingSenderId: "placeholder-messaging-sender-id",
-    appId: "placeholder-app-id"
+    apiKey: "AIzaSyDESCa7MNP_h8aVNPDcv1eBJ7pJD8Pqm-M",
+    authDomain: "thebe-institute.firebaseapp.com",
+    projectId: "thebe-institute",
+    storageBucket: "thebe-institute.firebasestorage.app",
+    messagingSenderId: "818338205348",
+    appId: "1:818338205348:web:0bccb60683a52d7917e031"
   };
 }
 
