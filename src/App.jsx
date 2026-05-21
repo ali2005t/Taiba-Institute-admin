@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import * as XLSX from 'xlsx';
 import { initializeApp } from 'firebase/app';
 import { 
   signInWithEmailAndPassword, 
@@ -42,7 +43,14 @@ import {
   RefreshCw,
   Info,
   Edit3,
-  Menu
+  Menu,
+  Calendar,
+  Eye,
+  EyeOff,
+  Save,
+  Clock,
+  DownloadCloud,
+  UploadCloud
 } from 'lucide-react';
 
 export default function App() {
@@ -69,6 +77,19 @@ export default function App() {
   const [exams, setExams] = useState([]);
   const [announcements, setAnnouncements] = useState([]);
   const [reports, setReports] = useState([]);
+  const [schedules, setSchedules] = useState([]);
+  const [logs, setLogs] = useState([]);
+
+  // Exam Schedule Builder States
+  const [schedTitle, setSchedTitle] = useState('');
+  const [schedType, setSchedType] = useState('midterm');
+  const [schedCohort, setSchedCohort] = useState(COHORTS[0]);
+  const [schedMajor, setSchedMajor] = useState('كل التخصصات');
+  const [schedNotes, setSchedNotes] = useState('');
+  const [schedExams, setSchedExams] = useState([]); 
+  const [schedStatus, setSchedStatus] = useState('');
+  const [schedExamDate, setSchedExamDate] = useState('');
+  const [schedExamSubject, setSchedExamSubject] = useState('');
 
   // Material Creation Form States
   const [matTitle, setMatTitle] = useState('');
@@ -101,6 +122,7 @@ export default function App() {
 
   // Announcement Broadcaster Form States
   const [annMsg, setAnnMsg] = useState('');
+  const [annType, setAnnType] = useState('alert');
   const [annCohort, setAnnCohort] = useState(COHORTS[0]);
   const [annMajor, setAnnMajor] = useState('كل التخصصات');
   const [annStatus, setAnnStatus] = useState('');
@@ -120,6 +142,77 @@ export default function App() {
   const [qText, setQText] = useState('');
   const [qType, setQType] = useState('mcq'); // mcq, tf, essay
   const [qOptA, setQOptA] = useState('');
+
+  const excelInputRef = useRef(null);
+
+  const handleDownloadExcelTemplate = () => {
+    const wsData = [
+      ["التاريخ", "المقرر"],
+      ["02/06/2026", "ادارة الموارد البشرية"],
+      ["04/06/2026", "إدارة المؤسسات العامة"],
+      ["07/06/2026", "البنية التحتية لتكنولوجيا المعلومات"],
+      ["09/06/2026", "قواعد بيانات متقدمة"],
+      ["11/06/2026", "رياده الاعمال"]
+    ];
+    const ws = XLSX.utils.aoa_to_sheet(wsData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "الجدول");
+    XLSX.writeFile(wb, "جدول_الامتحانات_قالب.xlsx");
+  };
+
+  const handleUploadExcel = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const bstr = evt.target.result;
+        const wb = XLSX.read(bstr, { type: 'binary' });
+        const wsname = wb.SheetNames[0];
+        const ws = wb.Sheets[wsname];
+        const data = XLSX.utils.sheet_to_json(ws);
+
+        const getArabicDay = (dateStr) => {
+          if (!dateStr) return '';
+          const parts = dateStr.split('/');
+          if (parts.length === 3) {
+            const dateObj = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
+            if (!isNaN(dateObj)) {
+              return dateObj.toLocaleDateString('ar-EG', { weekday: 'long' });
+            }
+          }
+          return '';
+        };
+        
+        const newExams = data.map(row => {
+          const dStr = (row['التاريخ'] || row['تاريخ ووقت اللجنة'] || '').toString().trim();
+          const dayName = getArabicDay(dStr);
+          const finalDate = dayName ? `${dayName} ${dStr}` : dStr;
+
+          return {
+            date: finalDate,
+            subject: (row['المقرر'] || row['اسم المقرر'] || row['المادة'] || '').toString().trim(),
+          };
+        }).filter(ex => ex.date && ex.subject);
+
+        if (newExams.length === 0) {
+          setSchedStatus('⚠️ لم يتم العثور على أي مواد صالحة في ملف الإكسيل. تأكد من استخدام القالب الصحيح.');
+          setTimeout(() => setSchedStatus(''), 4000);
+          return;
+        }
+
+        setSchedExams(prev => [...prev, ...newExams]);
+        setSchedStatus(`✅ تم استيراد ${newExams.length} مادة من ملف الإكسيل بنجاح!`);
+        setTimeout(() => setSchedStatus(''), 4000);
+      } catch (err) {
+        setSchedStatus('حدث خطأ أثناء قراءة ملف الإكسيل: ' + err.message);
+        setTimeout(() => setSchedStatus(''), 4000);
+      }
+    };
+    reader.readAsBinaryString(file);
+    e.target.value = null; // reset
+  };
   const [qOptB, setQOptB] = useState('');
   const [qOptC, setQOptC] = useState('');
   const [qOptD, setQOptD] = useState('');
@@ -220,6 +313,7 @@ export default function App() {
         isBanned: true 
       });
       setBanModalConfig(prev => ({ ...prev, isOpen: false }));
+      logAdminAction('حظر طالب', `تم حظر الطالب: ${studentName} لسبب: ${reason}`);
       showAlert(`تم حظر حساب الطالب ${studentName} بنجاح.`, "تم الحظر 🚫");
     } catch (e) {
       showAlert("فشل الحظر: " + e.message, "فشل الإجراء");
@@ -287,6 +381,22 @@ export default function App() {
     setIsMobileMenuOpen(false);
   }, [currentTab]);
 
+  const logAdminAction = async (action, details) => {
+    try {
+      if (!profile || !profile.uid) return;
+      const logsRef = collection(db, 'artifacts', appId, 'public', 'data', 'admin_logs');
+      await addDoc(logsRef, {
+        action,
+        details,
+        adminName: profile.name,
+        adminUid: profile.uid,
+        timestamp: serverTimestamp()
+      });
+    } catch (e) {
+      console.error("Log error:", e);
+    }
+  };
+
   // Listen to Firestore documents once logged in
   useEffect(() => {
     if (!user || !profile) return;
@@ -333,6 +443,36 @@ export default function App() {
       setSubmissions(list);
     });
 
+    // 7. Listen to Exam Schedules
+    const schedRef = collection(db, 'artifacts', appId, 'public', 'data', 'exam_schedules');
+    const unsubScheds = onSnapshot(schedRef, (snapshot) => {
+      setSchedules(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    });
+
+    // 8. Listen to Admin Logs (and auto-cleanup old ones)
+    const logsRef = collection(db, 'artifacts', appId, 'public', 'data', 'admin_logs');
+    const unsubLogs = onSnapshot(logsRef, (snapshot) => {
+      const list = [];
+      const now = Date.now();
+      const weekInMs = 7 * 24 * 60 * 60 * 1000;
+      
+      snapshot.docs.forEach(docSnap => {
+        const data = docSnap.data();
+        if (data.timestamp) {
+           const logTime = data.timestamp.toMillis();
+           if (now - logTime > weekInMs) {
+             deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'admin_logs', docSnap.id));
+           } else {
+             list.push({ id: docSnap.id, ...data });
+           }
+        } else {
+           list.push({ id: docSnap.id, ...data });
+        }
+      });
+      list.sort((a, b) => (b.timestamp?.toMillis() || 0) - (a.timestamp?.toMillis() || 0));
+      setLogs(list);
+    });
+
     return () => {
       unsubStudents();
       unsubMats();
@@ -340,6 +480,8 @@ export default function App() {
       unsubAnn();
       unsubReports();
       unsubSubs();
+      unsubScheds();
+      unsubLogs();
     };
   }, [user, profile]);
 
@@ -519,6 +661,7 @@ export default function App() {
       const profileDetailsRef = doc(db, 'artifacts', appId, 'users', studentId, 'profile', 'details');
       await updateDoc(profileDetailsRef, { role: newRole });
 
+      logAdminAction('ترقية/تخفيض رتبة', `تم تغيير رتبة المستخدم إلى ${newRole}`);
       showAlert(`تم بنجاح تحديث رتبة المستخدم إلى: ${newRole === 'admin' ? 'مدير' : newRole === 'helper' ? 'مساعد' : 'طالب عادي'}`, "تحديث الرتبة");
     } catch (e) {
       showAlert("خطأ أثناء تحديث الرتبة: " + e.message, "فشل الإجراء");
@@ -561,6 +704,7 @@ export default function App() {
       try {
         await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'student_directory', studentUid));
         await deleteDoc(doc(db, 'artifacts', appId, 'users', studentUid, 'profile', 'details'));
+        logAdminAction('إقصاء طالب', `تم حذف حساب الطالب نهائياً: ${name}`);
         showAlert("تم إقصاء وحذف الحساب الأكاديمي للطالب بنجاح.", "حذف حساب طالب");
       } catch (e) {
         showAlert("فشل الحذف: " + e.message, "فشل الإجراء");
@@ -577,6 +721,7 @@ export default function App() {
           const directoryRef = doc(db, 'artifacts', appId, 'public', 'data', 'student_directory', studentUid);
           await updateDoc(profileRef, { isBanned: false, banType: null, banUntil: null, banReason: null });
           await updateDoc(directoryRef, { isBanned: false });
+          logAdminAction('فك حظر طالب', `تم فك الحظر عن الطالب: ${name}`);
           showAlert(`تم إلغاء حظر الطالب ${name} بنجاح.`, "فك الحظر 🔓");
         } catch (e) {
           showAlert("فشل الإجراء: " + e.message, "فشل فك الحظر");
@@ -604,6 +749,7 @@ export default function App() {
             await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'materials', matId, 'chunks', String(i)));
           }
         }
+        logAdminAction('حذف مقرر/مادة', `تم حذف المادة ذات المعرف: ${matId}`);
       } catch (err) {
         console.error("Error deleting material chunks:", err);
       }
@@ -614,6 +760,7 @@ export default function App() {
   const handleDeleteAnnouncement = async (annId) => {
     showConfirm("هل تريد حذف هذا التنبيه؟", async () => {
       await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'announcements', annId));
+      logAdminAction('حذف إعلان/تنبيه', `تم حذف الإعلان: ${annId}`);
     }, "حذف إعلان");
   };
 
@@ -628,6 +775,7 @@ export default function App() {
   const handleDeleteExam = async (examId) => {
     showConfirm("هل تريد حذف هذا الاختبار التجريبي نهائياً؟", async () => {
       await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'exams', examId));
+      logAdminAction('حذف اختبار', `تم حذف الاختبار: ${examId}`);
     }, "حذف اختبار");
   };
 
@@ -699,6 +847,7 @@ export default function App() {
       setMatTitle('');
       setMatUrl('');
       setMatPdfBase64('');
+      logAdminAction('رفع مادة/مقرر', `تم رفع المادة: ${matTitle}`);
       setMatStatus('تم الرفع البث والتعميم للطلاب بنجاح! 🍉');
     } catch (err) {
       console.error(err);
@@ -711,28 +860,36 @@ export default function App() {
   // Broadcast Announcement
   const handleAddAnnSubmit = async (e) => {
     e.preventDefault();
-    setAnnStatus('جاري النشر...');
-    try {
-      const finalCohort = (profile && profile.role === 'helper' && profile.assignedCohort && profile.assignedCohort !== 'كل الفرق') 
-        ? profile.assignedCohort 
-        : annCohort;
-      const finalMajor = (profile && profile.role === 'helper' && profile.assignedMajor && profile.assignedMajor !== 'كل التخصصات') 
-        ? profile.assignedMajor 
-        : annMajor;
-      const annRef = collection(db, 'artifacts', appId, 'public', 'data', 'announcements');
-      await addDoc(annRef, {
-        msg: annMsg,
-        cohort: finalCohort,
-        major: finalMajor,
-        createdAt: serverTimestamp(),
-        addedBy: profile.name
-      });
-      setAnnMsg('');
-      setAnnStatus('تم تعميم البث الدراسي بنجاح! 🔔');
-    } catch (err) {
-      setAnnStatus('خطأ: ' + err.message);
-    }
-    setTimeout(() => setAnnStatus(''), 4000);
+    if(!annMsg.trim()) return;
+    
+    showConfirm(`هل أنت متأكد من رغبتك في بث هذا الإشعار فوراً للطلاب؟\n\n"${annMsg}"\n\nسيتم إرسال الإشعار إلى: ${annCohort} - ${annMajor}`, async () => {
+      setAnnStatus('جاري النشر...');
+      try {
+        const finalCohort = (profile && profile.role === 'helper' && profile.assignedCohort && profile.assignedCohort !== 'كل الفرق') 
+          ? profile.assignedCohort 
+          : annCohort;
+        const finalMajor = (profile && profile.role === 'helper' && profile.assignedMajor && profile.assignedMajor !== 'كل التخصصات') 
+          ? profile.assignedMajor 
+          : annMajor;
+        const annRef = collection(db, 'artifacts', appId, 'public', 'data', 'announcements');
+        await addDoc(annRef, {
+          msg: annMsg,
+          type: annType,
+          cohort: finalCohort,
+          major: finalMajor,
+          createdAt: serverTimestamp(),
+          addedBy: profile.name
+        });
+        
+        logAdminAction('بث إشعار جديد', `تم بث إشعار جديد: ${annMsg}`);
+        setAnnMsg('');
+        setAnnStatus('');
+        showAlert('تم تعميم وبث الإشعار الدراسي بنجاح للطلاب! 🔔', 'إشعار تم بنجاح');
+      } catch (err) {
+        setAnnStatus('خطأ: ' + err.message);
+      }
+      setTimeout(() => setAnnStatus(''), 4000);
+    }, 'تأكيد إرسال إشعار 📢');
   };
 
   // Add/Update Question inside Exam Array
@@ -834,11 +991,13 @@ export default function App() {
       if (editingExamId) {
         const examDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'exams', editingExamId);
         await updateDoc(examDocRef, examData);
+        logAdminAction('تعديل اختبار', `تم تعديل الاختبار: ${examTitle}`);
         setExamStatus('تم تحديث وتعديل الاختبار بنجاح! ✏️');
         setEditingExamId(null);
       } else {
         const examRef = collection(db, 'artifacts', appId, 'public', 'data', 'exams');
         await addDoc(examRef, examData);
+        logAdminAction('إضافة اختبار', `تم إضافة اختبار جديد: ${examTitle}`);
         setExamStatus('تم بناء وتعميم الاختبار التجريبي للطلاب بنجاح! 🎓');
       }
 
@@ -851,6 +1010,66 @@ export default function App() {
       setExamStatus('خطأ: ' + err.message);
     }
     setTimeout(() => setExamStatus(''), 4000);
+  };
+
+  // Create / Register New Exam Schedule
+  const handleAddScheduleSubmit = async (e) => {
+    e.preventDefault();
+    if (schedExams.length === 0) {
+      showAlert("الرجاء إضافة مادة واحدة على الأقل للجدول!", "خطأ في بناء الجدول");
+      return;
+    }
+    setSchedStatus('جاري حفظ واعتماد الجدول...');
+    try {
+      const finalCohort = (profile && profile.role === 'helper' && profile.assignedCohort && profile.assignedCohort !== 'كل الفرق') 
+        ? profile.assignedCohort 
+        : schedCohort;
+      const finalMajor = (profile && profile.role === 'helper' && profile.assignedMajor && profile.assignedMajor !== 'كل التخصصات') 
+        ? profile.assignedMajor 
+        : schedMajor;
+      
+      const schedData = {
+        title: schedTitle,
+        type: schedType,
+        cohort: finalCohort,
+        major: finalMajor,
+        notes: schedNotes,
+        exams: schedExams,
+        visible: true,
+        createdAt: serverTimestamp(),
+        addedBy: profile.name
+      };
+
+      const schedRef = collection(db, 'artifacts', appId, 'public', 'data', 'exam_schedules');
+      await addDoc(schedRef, schedData);
+      
+      logAdminAction('إضافة جدول امتحانات', `تمت إضافة جدول: ${schedTitle}`);
+      setSchedStatus('تم اعتماد وإصدار الجدول للطلاب بنجاح! 📅');
+      
+      setSchedTitle('');
+      setSchedNotes('');
+      setSchedExams([]);
+    } catch (err) {
+      setSchedStatus('خطأ: ' + err.message);
+    }
+    setTimeout(() => setSchedStatus(''), 4000);
+  };
+
+  const handleToggleScheduleVisibility = async (schedId, currentVisibility) => {
+    try {
+      const schedRef = doc(db, 'artifacts', appId, 'public', 'data', 'exam_schedules', schedId);
+      await updateDoc(schedRef, { visible: !currentVisibility });
+      logAdminAction(currentVisibility ? 'إخفاء جدول' : 'إظهار جدول', `تم تغيير حالة ظهور الجدول: ${schedId}`);
+    } catch (e) {
+      showAlert("خطأ في تغيير حالة الجدول: " + e.message, "فشل الإجراء");
+    }
+  };
+
+  const handleDeleteSchedule = async (schedId) => {
+    showConfirm("هل أنت متأكد من حذف هذا الجدول نهائياً؟", async () => {
+      await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'exam_schedules', schedId));
+      logAdminAction('حذف جدول امتحانات', `تم حذف جدول: ${schedId}`);
+    }, "تأكيد حذف الجدول");
   };
 
   // Create / Register New Staff Member from Admin cockpit
@@ -1245,6 +1464,28 @@ export default function App() {
           </button>
 
           {/* Removed Firebase Data Initialization button as per request */}
+
+          <button 
+            onClick={() => setCurrentTab('schedules')}
+            className={`w-full p-3.5 flex items-center justify-between text-xs font-black sidebar-btn ${currentTab === 'schedules' ? 'active' : ''}`}
+          >
+            <span className="flex items-center gap-2.5">
+              <Calendar size={16} /> جداول الامتحانات
+            </span>
+            <span className="bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 px-2 py-0.5 rounded-full text-[10px] font-black">{schedules.length}</span>
+          </button>
+
+          {profile.role === 'admin' && (
+            <button 
+              onClick={() => setCurrentTab('logs')}
+              className={`w-full p-3.5 flex items-center justify-between text-xs font-black sidebar-btn ${currentTab === 'logs' ? 'active' : ''}`}
+            >
+              <span className="flex items-center gap-2.5">
+                <FileText size={16} /> سجل نشاطات الإدارة (Logs)
+              </span>
+              <span className="bg-rose-500/20 text-rose-600 dark:text-rose-400 px-2 py-0.5 rounded-full text-[10px] font-black">{logs.length}</span>
+            </button>
+          )}
 
         </aside>
 
@@ -1872,6 +2113,18 @@ export default function App() {
 
                     <div className="grid grid-cols-2 gap-2">
                       <div>
+                        <label className="block text-[10px] font-black text-slate-500 dark:text-slate-400 mb-1">نوع المنشور</label>
+                        <select 
+                          value={annType} 
+                          onChange={e=>setAnnType(e.target.value)}
+                          className="w-full px-3 py-2.5 admin-input font-bold text-xs focus:outline-none"
+                        >
+                          <option value="alert">تنبيه عاجل 🔔</option>
+                          <option value="news">خبر / محاضرة 📰</option>
+                        </select>
+                      </div>
+
+                      <div>
                         <label className="block text-[10px] font-black text-slate-500 dark:text-slate-400 mb-1">الفرقة المستهدفة</label>
                         <select 
                           value={profile.role === 'helper' && profile.assignedCohort && profile.assignedCohort !== 'كل الفرق' ? profile.assignedCohort : annCohort} 
@@ -1883,7 +2136,9 @@ export default function App() {
                           {COHORTS.map(c => <option key={c} value={c}>{c}</option>)}
                         </select>
                       </div>
+                    </div>
 
+                    <div className="grid grid-cols-1 gap-2">
                       <div>
                         <label className="block text-[10px] font-black text-slate-500 dark:text-slate-400 mb-1">التخصص المستهدف</label>
                         <select 
@@ -2463,6 +2718,301 @@ export default function App() {
                   </div>
                 )}
 
+              </div>
+            </div>
+          )}
+
+          {/* TAB 9: SCHEDULES */}
+          {currentTab === 'schedules' && (
+            <div className="space-y-6 fade-in text-right">
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                
+                {/* Add Schedule Form */}
+                <div className="lg:col-span-4 admin-card p-6 space-y-4">
+                  <h3 className="text-md font-black border-r-4 border-yellow-500 pr-2 gradient-text-gold">
+                    إضافة وتعميم جدول امتحانات جديد 📅
+                  </h3>
+                  
+                  <form onSubmit={handleAddScheduleSubmit} className="space-y-4">
+                    <div>
+                      <label className="block text-[10px] font-black text-slate-500 dark:text-slate-400 mb-1">اسم/عنوان الجدول (مثال: ميدتيرم الفرقة الأولى)</label>
+                      <input 
+                        type="text" 
+                        required 
+                        value={schedTitle}
+                        onChange={e=>setSchedTitle(e.target.value)}
+                        className="w-full px-4 py-2.5 admin-input font-bold text-xs focus:outline-none"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-[10px] font-black text-slate-500 dark:text-slate-400 mb-1">نوع الامتحانات</label>
+                        <select 
+                          value={schedType} 
+                          onChange={e=>setSchedType(e.target.value)}
+                          className="w-full px-3 py-2.5 admin-input font-bold text-xs focus:outline-none"
+                        >
+                          <option value="midterm">ميدتيرم (Midterm)</option>
+                          <option value="final">الفاينال (Final)</option>
+                          <option value="practical">عملي (Practical)</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] font-black text-slate-500 dark:text-slate-400 mb-1">الفرقة المستهدفة</label>
+                        <select 
+                          value={schedCohort} 
+                          onChange={e=>setSchedCohort(e.target.value)}
+                          className="w-full px-3 py-2.5 admin-input font-bold text-xs focus:outline-none"
+                        >
+                          {COHORTS.map(c => <option key={c} value={c}>{c}</option>)}
+                        </select>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-black text-slate-500 dark:text-slate-400 mb-1">التخصص المستهدف</label>
+                      <select 
+                        value={schedMajor} 
+                        onChange={e=>setSchedMajor(e.target.value)}
+                        className="w-full px-3 py-2.5 admin-input font-bold text-xs focus:outline-none"
+                      >
+                        <option value="كل التخصصات">كل التخصصات 🎓</option>
+                        {MAJORS.map(m => <option key={m} value={m}>{m}</option>)}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-black text-slate-500 dark:text-slate-400 mb-1">ملاحظات وقواعد للامتحان (اختياري)</label>
+                      <textarea 
+                        rows={2}
+                        placeholder="اكتب التنبيهات مثل: الحضور قبل اللجنة بنصف ساعة، يمنع اصطحاب الموبايل..."
+                        value={schedNotes}
+                        onChange={e=>setSchedNotes(e.target.value)}
+                        className="w-full p-3 rounded-xl admin-input font-bold text-xs focus:outline-none resize-none"
+                      />
+                    </div>
+
+                    <div className="border-t border-[#0e5e6f]/10 dark:border-slate-800 pt-4 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <h4 className="text-xs font-black text-yellow-600 dark:text-yellow-400">إدراج مواد الجدول:</h4>
+                        <div className="flex items-center gap-2">
+                          <input 
+                            type="file" 
+                            accept=".xlsx, .xls" 
+                            className="hidden" 
+                            ref={excelInputRef}
+                            onChange={handleUploadExcel}
+                          />
+                          <button 
+                            type="button" 
+                            onClick={handleDownloadExcelTemplate}
+                            className="px-3 py-1.5 bg-[#0e5e6f]/10 text-[#0e5e6f] dark:text-[#bfebd4] hover:bg-[#0e5e6f]/20 rounded-lg flex items-center gap-1 transition text-[9px]"
+                            title="تحميل قالب الإكسيل"
+                          >
+                            <DownloadCloud size={12} /> تحميل القالب
+                          </button>
+                          <button 
+                            type="button" 
+                            onClick={() => excelInputRef.current?.click()}
+                            className="px-3 py-1.5 bg-emerald-500 text-white hover:bg-emerald-600 rounded-lg flex items-center gap-1 transition shadow-sm text-[9px]"
+                            title="رفع من ملف إكسيل"
+                          >
+                            <UploadCloud size={12} /> استيراد اكسيل
+                          </button>
+                        </div>
+                      </div>
+                      
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="block text-[9px] font-black text-slate-500 dark:text-slate-400 mb-1">تاريخ ووقت اللجنة</label>
+                          <input 
+                            type="text" 
+                            placeholder="مثال: الثلاثاء 25/5 12:00PM"
+                            value={schedExamDate}
+                            onChange={e=>setSchedExamDate(e.target.value)}
+                            className="w-full px-2.5 py-2 rounded-xl admin-input font-bold text-[10px] focus:outline-none"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[9px] font-black text-slate-500 dark:text-slate-400 mb-1">اسم المقرر/المادة</label>
+                          <input 
+                            type="text" 
+                            placeholder="مثال: هندسة برمجيات"
+                            value={schedExamSubject}
+                            onChange={e=>setSchedExamSubject(e.target.value)}
+                            className="w-full px-2.5 py-2 rounded-xl admin-input font-bold text-[10px] focus:outline-none"
+                          />
+                        </div>
+                      </div>
+                      
+                      <button 
+                        type="button"
+                        onClick={() => {
+                          if(!schedExamDate || !schedExamSubject) return;
+                          setSchedExams([...schedExams, { date: schedExamDate, subject: schedExamSubject }]);
+                          setSchedExamDate('');
+                          setSchedExamSubject('');
+                        }}
+                        className="w-full py-2 bg-[#0e5e6f]/10 hover:bg-[#0e5e6f]/20 text-[#0e5e6f] dark:text-[#bfebd4] font-black rounded-xl text-[10px] transition cursor-pointer"
+                      >
+                        ➕ إضافة المادة للجدول أدناه
+                      </button>
+
+                      {/* Preview of added exams */}
+                      {schedExams.length > 0 && (
+                        <div className="max-h-[150px] overflow-y-auto space-y-1.5 pr-1">
+                          {schedExams.map((ex, idx) => (
+                            <div key={idx} className="flex justify-between items-center bg-slate-100 dark:bg-slate-900 px-3 py-2 rounded-lg text-[10px] font-bold">
+                              <span className="text-[#0e5e6f] dark:text-[#bfebd4]">{ex.date}</span>
+                              <span className="text-slate-700 dark:text-slate-300">{ex.subject}</span>
+                              <button type="button" onClick={() => setSchedExams(schedExams.filter((_, i) => i !== idx))} className="text-rose-500 hover:text-rose-600 cursor-pointer">✕</button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    <button 
+                      type="submit" 
+                      className="w-full py-3.5 btn-gold text-slate-950 font-black rounded-2xl text-xs shadow-md transition cursor-pointer"
+                    >
+                      حفظ واعتماد الجدول نهائياً 🚀
+                    </button>
+                    {schedStatus && <p className="text-center text-xs font-black text-emerald-600 dark:text-emerald-400">{schedStatus}</p>}
+                  </form>
+                </div>
+
+                {/* Schedules List */}
+                <div className="lg:col-span-8 admin-card p-6 overflow-hidden flex flex-col">
+                  <h3 className="text-md font-black border-r-4 border-yellow-500 pr-2 mb-4 gradient-text-gold">الجداول الدراسية المضافة والموثقة</h3>
+                  
+                  <div className="flex-1 overflow-y-auto space-y-4 max-h-[600px] pr-1">
+                    {schedules.map((sched) => (
+                      <div key={sched.id} className="p-4 bg-slate-500/5 dark:bg-slate-950/40 border border-[#0e5e6f]/10 dark:border-slate-800 rounded-2xl transition hover:scale-[1.01] space-y-3">
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <span className="block font-black text-[#0e5e6f] dark:text-slate-200 text-sm mb-1">{sched.title}</span>
+                            <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 flex flex-wrap gap-2">
+                              <span className="bg-[#0e5e6f]/10 text-[#0e5e6f] dark:text-[#bfebd4] px-2 py-0.5 rounded-md">نوع: {sched.type === 'midterm' ? 'ميدتيرم' : sched.type === 'final' ? 'فاينال' : 'عملي'}</span>
+                              <span className="bg-slate-200 dark:bg-slate-800 px-2 py-0.5 rounded-md">الفرقة: {sched.cohort}</span>
+                              <span className="bg-slate-200 dark:bg-slate-800 px-2 py-0.5 rounded-md">تخصص: {sched.major}</span>
+                              <span className="bg-slate-200 dark:bg-slate-800 px-2 py-0.5 rounded-md">بواسطة: {sched.addedBy}</span>
+                            </span>
+                          </div>
+                          
+                          <div className="flex gap-2 shrink-0">
+                            <button 
+                              onClick={() => handleToggleScheduleVisibility(sched.id, sched.visible)}
+                              className={`p-2 rounded-xl transition cursor-pointer text-white font-bold flex items-center gap-1.5 text-[10px] ${
+                                sched.visible 
+                                  ? 'bg-amber-500 hover:bg-amber-600 shadow-md' 
+                                  : 'bg-emerald-500 hover:bg-emerald-600 shadow-md'
+                              }`}
+                              title={sched.visible ? "إخفاء الجدول مؤقتاً عن الطلاب" : "إظهار الجدول للطلاب"}
+                            >
+                              {sched.visible ? <EyeOff size={14}/> : <Eye size={14}/>}
+                              {sched.visible ? 'إخفاء مؤقت' : 'تفعيل وإظهار'}
+                            </button>
+
+                            <button 
+                              onClick={() => handleDeleteSchedule(sched.id)}
+                              className="p-2 bg-rose-600/10 hover:bg-rose-600/20 text-rose-600 dark:text-rose-400 rounded-xl transition cursor-pointer"
+                              title="حذف الجدول نهائياً"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </div>
+                        </div>
+
+                        {sched.notes && (
+                          <div className="p-2.5 bg-yellow-500/10 border border-yellow-500/20 rounded-xl text-[10px] font-bold text-yellow-700 dark:text-yellow-400">
+                            <strong>ملاحظات:</strong> {sched.notes}
+                          </div>
+                        )}
+
+                        <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 overflow-hidden">
+                           <table className="w-full text-[10px] font-bold text-right">
+                             <thead className="bg-slate-50 dark:bg-slate-800/50 text-slate-500">
+                               <tr>
+                                 <th className="p-2.5 border-b border-slate-200 dark:border-slate-700">تاريخ ووقت اللجنة</th>
+                                 <th className="p-2.5 border-b border-slate-200 dark:border-slate-700">المقرر / المادة</th>
+                               </tr>
+                             </thead>
+                             <tbody>
+                               {sched.exams && sched.exams.map((ex, i) => (
+                                 <tr key={i} className="border-b last:border-0 border-slate-100 dark:border-slate-800">
+                                   <td className="p-2.5 text-[#0e5e6f] dark:text-[#bfebd4]">{ex.date}</td>
+                                   <td className="p-2.5 text-slate-700 dark:text-slate-300">{ex.subject}</td>
+                                 </tr>
+                               ))}
+                             </tbody>
+                           </table>
+                        </div>
+
+                      </div>
+                    ))}
+                    {schedules.length === 0 && (
+                      <div className="text-center p-8 text-slate-500 font-extrabold text-sm border-2 border-dashed border-slate-300 dark:border-slate-800 rounded-3xl">
+                        لا توجد جداول امتحانات معلنة حالياً.
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+              </div>
+            </div>
+          )}
+
+          {/* TAB 10: LOGS (ADMIN ONLY) */}
+          {currentTab === 'logs' && profile.role === 'admin' && (
+            <div className="space-y-6 fade-in text-right">
+              <div className="flex justify-between items-center">
+                <h2 className="text-xl font-black border-r-4 border-yellow-500 pr-3 gradient-text-gold">سجل نشاطات وعمليات الإدارة</h2>
+                <div className="px-3 py-1.5 bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 rounded-xl text-[10px] font-black flex items-center gap-2">
+                  <Check size={14} /> يتم تنظيف السجلات تلقائياً كل 7 أيام
+                </div>
+              </div>
+              
+              <div className="admin-card p-6 overflow-hidden flex flex-col">
+                <div className="overflow-x-auto">
+                  <table className="admin-table text-xs text-right">
+                    <thead className="text-[#0e5e6f] dark:text-[#bfebd4] font-black">
+                      <tr>
+                        <th className="p-4 w-40">توقيت العملية</th>
+                        <th className="p-4 w-48">اسم المسؤول</th>
+                        <th className="p-4 w-48">نوع العملية</th>
+                        <th className="p-4">التفاصيل والتغييرات</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {logs.map((log) => (
+                        <tr key={log.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/30">
+                          <td className="p-4 text-[10px] font-bold text-slate-500 dark:text-slate-400" dir="ltr">
+                            {log.timestamp ? new Date(log.timestamp.toMillis()).toLocaleString('ar-EG') : 'الآن'}
+                          </td>
+                          <td className="p-4 font-black text-slate-700 dark:text-slate-300">{log.adminName}</td>
+                          <td className="p-4">
+                            <span className="px-2.5 py-1 bg-[#0e5e6f]/10 text-[#0e5e6f] dark:text-[#bfebd4] rounded-full text-[10px] font-black border border-[#0e5e6f]/20">
+                              {log.action}
+                            </span>
+                          </td>
+                          <td className="p-4 text-[11px] font-bold text-slate-600 dark:text-slate-400 leading-relaxed">
+                            {log.details}
+                          </td>
+                        </tr>
+                      ))}
+                      {logs.length === 0 && (
+                        <tr>
+                          <td colSpan="4" className="text-center p-8 text-slate-500 font-extrabold text-sm">
+                            سجل العمليات فارغ حالياً.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
           )}
