@@ -1,43 +1,44 @@
 import React, { useState, useEffect, useRef } from 'react';
 import * as XLSX from 'xlsx';
+import AdminChatView from './components/AdminChatView';
 import { initializeApp } from 'firebase/app';
-import { 
-  signInWithEmailAndPassword, 
+import {
+  signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
-  onAuthStateChanged, 
+  onAuthStateChanged,
   signOut,
   getAuth
 } from 'firebase/auth';
-import { 
-  collection, 
-  doc, 
-  getDoc, 
-  onSnapshot, 
-  updateDoc, 
-  setDoc, 
-  addDoc, 
-  deleteDoc, 
-  serverTimestamp 
+import {
+  collection,
+  doc,
+  getDoc,
+  onSnapshot,
+  updateDoc,
+  setDoc,
+  addDoc,
+  deleteDoc,
+  serverTimestamp
 } from 'firebase/firestore';
 import { auth, db, appId, firebaseConfig, storage } from './firebase';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { COHORTS, MAJORS } from './constants';
-import { 
-  ShieldAlert, 
-  Users, 
-  FileText, 
-  Megaphone, 
-  GraduationCap, 
-  LogOut, 
-  Sun, 
-  Moon, 
-  Trash2, 
-  Plus, 
-  Search, 
-  Check, 
-  X, 
-  Shield, 
-  Activity, 
+import {
+  ShieldAlert,
+  Users,
+  FileText,
+  Megaphone,
+  GraduationCap,
+  LogOut,
+  Sun,
+  Moon,
+  Trash2,
+  Plus,
+  Search,
+  Check,
+  X,
+  Shield,
+  Activity,
   FileQuestion,
   AlertTriangle,
   RefreshCw,
@@ -50,7 +51,10 @@ import {
   Save,
   Clock,
   DownloadCloud,
-  UploadCloud
+  UploadCloud,
+  MessageCircle,
+  Flag,
+  Bell
 } from 'lucide-react';
 
 export default function App() {
@@ -60,7 +64,7 @@ export default function App() {
   const [authError, setAuthError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
   const theme = 'light';
-  const setTheme = () => {};
+  const setTheme = () => { };
   const [currentTab, setCurrentTab] = useState('overview');
   const [isLogin, setIsLogin] = useState(true);
 
@@ -77,8 +81,22 @@ export default function App() {
   const [exams, setExams] = useState([]);
   const [announcements, setAnnouncements] = useState([]);
   const [reports, setReports] = useState([]);
+  const [chatReports, setChatReports] = useState([]);
   const [schedules, setSchedules] = useState([]);
   const [logs, setLogs] = useState([]);
+  const [adminChatCohort, setAdminChatCohort] = useState(COHORTS[0]);
+  const [adminChatMajor, setAdminChatMajor] = useState(MAJORS[0]);
+  const [adminGroupMessages, setAdminGroupMessages] = useState([]);
+  const [adminMentions, setAdminMentions] = useState([]);
+  const [lastSeenAdminGroupChat, setLastSeenAdminGroupChat] = useState(parseInt(localStorage.getItem('lastSeenAdminGroupChat') || '0'));
+
+  useEffect(() => {
+    if (currentTab === 'admin_chat') {
+      const now = Date.now();
+      localStorage.setItem('lastSeenAdminGroupChat', now.toString());
+      setLastSeenAdminGroupChat(now);
+    }
+  }, [currentTab, adminGroupMessages]);
 
   // Exam Schedule Builder States
   const [schedTitle, setSchedTitle] = useState('');
@@ -86,7 +104,7 @@ export default function App() {
   const [schedCohort, setSchedCohort] = useState(COHORTS[0]);
   const [schedMajor, setSchedMajor] = useState('كل التخصصات');
   const [schedNotes, setSchedNotes] = useState('');
-  const [schedExams, setSchedExams] = useState([]); 
+  const [schedExams, setSchedExams] = useState([]);
   const [schedStatus, setSchedStatus] = useState('');
   const [schedExamDate, setSchedExamDate] = useState('');
   const [schedExamSubject, setSchedExamSubject] = useState('');
@@ -184,7 +202,7 @@ export default function App() {
           }
           return '';
         };
-        
+
         const newExams = data.map(row => {
           const dStr = (row['التاريخ'] || row['تاريخ ووقت اللجنة'] || '').toString().trim();
           const dayName = getArabicDay(dStr);
@@ -221,6 +239,7 @@ export default function App() {
 
   // Search filter
   const [searchQuery, setSearchQuery] = useState('');
+  const [notiDropdownOpen, setNotiDropdownOpen] = useState(false);
 
   // Add Staff Member Form States
   const [newStaffName, setNewStaffName] = useState('');
@@ -303,14 +322,14 @@ export default function App() {
     try {
       const profileRef = doc(db, 'artifacts', appId, 'users', studentUid, 'profile', 'details');
       const directoryRef = doc(db, 'artifacts', appId, 'public', 'data', 'student_directory', studentUid);
-      await updateDoc(profileRef, { 
-        isBanned: true, 
-        banType, 
-        banUntil, 
-        banReason: reason 
+      await updateDoc(profileRef, {
+        isBanned: true,
+        banType,
+        banUntil,
+        banReason: reason
       });
-      await updateDoc(directoryRef, { 
-        isBanned: true 
+      await updateDoc(directoryRef, {
+        isBanned: true
       });
       setBanModalConfig(prev => ({ ...prev, isOpen: false }));
       logAdminAction('حظر طالب', `تم حظر الطالب: ${studentName} لسبب: ${reason}`);
@@ -328,7 +347,7 @@ export default function App() {
 
   // Auth Listener with Real-Time Profile Updates
   useEffect(() => {
-    let profileUnsub = () => {};
+    let profileUnsub = () => { };
     const authUnsub = onAuthStateChanged(auth, (currentUser) => {
       if (currentUser) {
         const profileRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'profile', 'details');
@@ -336,7 +355,7 @@ export default function App() {
           if (profileSnap.exists()) {
             const profileData = profileSnap.data();
             if (profileData.role === 'admin' || profileData.role === 'helper') {
-              setProfile(profileData);
+              setProfile({ uid: currentUser.uid, ...profileData });
               setUser(currentUser);
               setAuthError('');
             } else {
@@ -368,6 +387,18 @@ export default function App() {
       profileUnsub();
     };
   }, []);
+
+  // Sync helper's active cohort with allowed cohorts
+  useEffect(() => {
+    if (profile && profile.role === 'helper' && profile.allowedCohorts && profile.allowedCohorts.length > 0) {
+      const firstCohort = profile.allowedCohorts[0];
+      setAdminChatCohort(firstCohort);
+      setMatCohort(firstCohort);
+      setAnnCohort(firstCohort);
+      setExamCohort(firstCohort);
+      setSchedCohort(firstCohort);
+    }
+  }, [profile]);
 
   // Enforce role permission guards on client-side navigation tabs
   useEffect(() => {
@@ -404,7 +435,10 @@ export default function App() {
     // 1. Listen to Student Directory
     const dirRef = collection(db, 'artifacts', appId, 'public', 'data', 'student_directory');
     const unsubStudents = onSnapshot(dirRef, (snapshot) => {
-      setStudents(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      setStudents(snapshot.docs.map(doc => {
+        const data = doc.data();
+        return { id: doc.id, uid: doc.id, ...data };
+      }));
     });
 
     // 2. Listen to Academic Materials
@@ -427,12 +461,20 @@ export default function App() {
       setAnnouncements(list);
     });
 
-    // 5. Listen to Reports
+    // 5. Listen to Profile Reports
     const repRef = collection(db, 'artifacts', appId, 'public', 'data', 'reports');
     const unsubReports = onSnapshot(repRef, (snapshot) => {
       const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       list.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
       setReports(list);
+    });
+
+    // 5b. Listen to Chat Reports
+    const chatRepRef = collection(db, 'artifacts', appId, 'public', 'data', 'chat_reports');
+    const unsubChatReports = onSnapshot(chatRepRef, (snapshot) => {
+      const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      list.sort((a, b) => (b.timestamp?.toMillis() || 0) - (a.timestamp?.toMillis() || 0));
+      setChatReports(list);
     });
 
     // 6. Listen to Exam Submissions
@@ -455,23 +497,48 @@ export default function App() {
       const list = [];
       const now = Date.now();
       const weekInMs = 7 * 24 * 60 * 60 * 1000;
-      
+
       snapshot.docs.forEach(docSnap => {
         const data = docSnap.data();
         if (data.timestamp) {
-           const logTime = data.timestamp.toMillis();
-           if (now - logTime > weekInMs) {
-             deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'admin_logs', docSnap.id));
-           } else {
-             list.push({ id: docSnap.id, ...data });
-           }
+          const logTime = data.timestamp.toMillis();
+          if (now - logTime > weekInMs) {
+            deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'admin_logs', docSnap.id));
+          } else {
+            list.push({ id: docSnap.id, ...data });
+          }
         } else {
-           list.push({ id: docSnap.id, ...data });
+          list.push({ id: docSnap.id, ...data });
         }
       });
       list.sort((a, b) => (b.timestamp?.toMillis() || 0) - (a.timestamp?.toMillis() || 0));
       setLogs(list);
     });
+
+    // 9. Listen to Admin Mentions
+    const mentionsRef = collection(db, 'artifacts', appId, 'public', 'data', 'admin_mentions');
+    const unsubMentions = onSnapshot(mentionsRef, (snapshot) => {
+      const list = [];
+      snapshot.docs.forEach(docSnap => {
+        const data = docSnap.data();
+        if (data.adminId === profile.uid || data.adminId === 'admin_support') {
+          list.push({ id: docSnap.id, ...data });
+        }
+      });
+      list.sort((a, b) => (b.timestamp?.toMillis() || 0) - (a.timestamp?.toMillis() || 0));
+
+      // Show Toast/Alert for new mentions (if any new mention added since first load)
+      let mentionsFirstLoad = adminMentions.length === 0;
+      if (!mentionsFirstLoad && list.length > adminMentions.length) {
+        const newMention = list[0]; // because sorted descending by timestamp
+        if (newMention.mentionerId !== profile.uid) {
+          playNotificationSound();
+          showAlert(`🚨 تم ذكرك بواسطة ${newMention.mentionerName} في شات دفعة ${newMention.cohort}! \nالرسالة: "${newMention.text}"`, "ذكر في الشات (Mention)");
+        }
+      }
+
+      setAdminMentions(list);
+    }, (err) => console.error("Admin mentions fetch error:", err));
 
     return () => {
       unsubStudents();
@@ -479,11 +546,57 @@ export default function App() {
       unsubExams();
       unsubAnn();
       unsubReports();
+      unsubChatReports();
       unsubSubs();
       unsubScheds();
       unsubLogs();
+      unsubMentions();
     };
   }, [user, profile]);
+
+  // Isolated useEffect for Admin Group Chat fetching
+  useEffect(() => {
+    if (!user || !profile || (profile.role !== 'admin' && profile.role !== 'helper')) return;
+
+    const cohortSafe = adminChatCohort.replace(/\s+/g, '_');
+    const majorSafe = adminChatMajor.replace(/\s+/g, '_');
+    const chatRef = collection(db, 'artifacts', appId, 'public', 'data', `chat_${cohortSafe}_${majorSafe}`);
+
+    const unsubGroup = onSnapshot(chatRef, (snapshot) => {
+      const msgs = [];
+      const threeDaysAgo = Date.now() - (3 * 24 * 60 * 60 * 1000);
+
+      snapshot.docs.forEach(docSnap => {
+        const data = docSnap.data();
+        const msgTime = data.timestamp?.toMillis() || 0;
+
+        if (msgTime > 0 && msgTime < threeDaysAgo) {
+          // Admins can trigger auto-delete of expired messages too
+          deleteDoc(docSnap.ref).catch(err => console.error("Auto-delete chat error:", err));
+        } else {
+          msgs.push({ id: docSnap.id, ...data });
+        }
+      });
+
+      let adminChatFirstLoad = adminGroupMessages.length === 0;
+
+      msgs.sort((a, b) => (a.timestamp?.toMillis() || 0) - (b.timestamp?.toMillis() || 0));
+
+      if (!adminChatFirstLoad && msgs.length > 0) {
+        const lastMsg = msgs[msgs.length - 1];
+        if (lastMsg.senderId !== profile.uid) {
+          if (lastMsg.mentions && (lastMsg.mentions.includes(profile.uid) || lastMsg.mentions.includes('admin_support'))) {
+            const displayName = lastMsg.senderNickname || lastMsg.senderName;
+            showAlert(`تم ذكر الإدارة في رسالة جديدة بواسطة ${displayName}!`, "إشعار منشن");
+          }
+        }
+      }
+
+      setAdminGroupMessages(msgs);
+    }, (err) => console.error(err));
+
+    return () => unsubGroup();
+  }, [user, profile, adminChatCohort, adminChatMajor]);
 
   // Get lists filtered by helper's assigned cohort and major restriction
   const getFilteredMaterials = () => {
@@ -601,7 +714,7 @@ export default function App() {
         email: email,
         uid: registeredUser.uid,
         studentId: generatedStudentId,
-        role: 'admin', 
+        role: 'admin',
         cohort: 'الفرقة الرابعة',
         major: 'علوم حاسب',
         bio: 'مسؤول لوحة التحكم الفنية والإدارية 👑',
@@ -698,6 +811,59 @@ export default function App() {
     }
   };
 
+  // Update Admin Nickname
+  const handleUpdateStaffNickname = async (staffId, nickname) => {
+    try {
+      const dirDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'student_directory', staffId);
+      await updateDoc(dirDocRef, { adminNickname: nickname });
+
+      const profileDetailsRef = doc(db, 'artifacts', appId, 'users', staffId, 'profile', 'details');
+      await updateDoc(profileDetailsRef, { adminNickname: nickname });
+
+      showAlert(`تم تعيين الاسم المستعار بنجاح: ${nickname}`, "تحديث الاسم");
+    } catch (e) {
+      showAlert("خطأ أثناء تعيين الاسم المستعار: " + e.message, "فشل الإجراء");
+    }
+  };
+
+  // Update Helper Permissions
+  const handleUpdateStaffPermissions = async (staffId, permissions) => {
+    try {
+      const dirDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'student_directory', staffId);
+      await updateDoc(dirDocRef, { permissions });
+
+      const profileDetailsRef = doc(db, 'artifacts', appId, 'users', staffId, 'profile', 'details');
+      await updateDoc(profileDetailsRef, { permissions });
+
+      showAlert("تم تحديث صلاحيات المشرف بدقة.", "تحديث الصلاحيات");
+    } catch (e) {
+      showAlert("خطأ أثناء تحديث الصلاحيات: " + e.message, "فشل الإجراء");
+    }
+  };
+  // Update Helper Allowed Cohorts
+  const handleUpdateStaffAllowedCohorts = async (staffId, cohortName, isChecked) => {
+    try {
+      const staffDoc = students.find(s => s.id === staffId);
+      let currentAllowed = staffDoc?.allowedCohorts || [];
+      if (isChecked) {
+        if (!currentAllowed.includes(cohortName)) {
+          currentAllowed = [...currentAllowed, cohortName];
+        }
+      } else {
+        currentAllowed = currentAllowed.filter(c => c !== cohortName);
+      }
+
+      const dirDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'student_directory', staffId);
+      await updateDoc(dirDocRef, { allowedCohorts: currentAllowed });
+
+      const profileDetailsRef = doc(db, 'artifacts', appId, 'users', staffId, 'profile', 'details');
+      await updateDoc(profileDetailsRef, { allowedCohorts: currentAllowed });
+
+      showAlert("تم تحديث الفرق الدراسية المسموح بها للمساعد بنجاح.", "تحديث الصلاحيات");
+    } catch (e) {
+      showAlert("خطأ أثناء تحديث الفرق المسموح بها: " + e.message, "فشل الإجراء");
+    }
+  };
   // Suspend / Delete Student Profile
   const handleDeleteStudent = async (studentUid, name) => {
     showConfirm(`⚠️ تحذير: هل أنت متأكد من حذف الحساب الدراسي للطالب ${name} نهائياً؟`, async () => {
@@ -784,11 +950,11 @@ export default function App() {
     e.preventDefault();
     setMatStatus('جاري بدء الرفع وتأمين الملف...');
     try {
-      const finalCohort = (profile && profile.role === 'helper' && profile.assignedCohort && profile.assignedCohort !== 'كل الفرق') 
-        ? profile.assignedCohort 
+      const finalCohort = (profile && profile.role === 'helper' && profile.assignedCohort && profile.assignedCohort !== 'كل الفرق')
+        ? profile.assignedCohort
         : matCohort;
-      const finalMajor = (profile && profile.role === 'helper' && profile.assignedMajor && profile.assignedMajor !== 'كل التخصصات') 
-        ? profile.assignedMajor 
+      const finalMajor = (profile && profile.role === 'helper' && profile.assignedMajor && profile.assignedMajor !== 'كل التخصصات')
+        ? profile.assignedMajor
         : matMajor;
 
       let finalUrl = '#';
@@ -818,7 +984,7 @@ export default function App() {
         finalUrl = `chunked:${matId}`;
 
         setMatStatus(`جاري بث ورفع الحزم السحابية (0 من ${totalChunks})...`);
-        
+
         // Upload chunks in batches/parallel to prevent Firestore congestion
         const chunkPromises = chunks.map((chunkData, index) => {
           const chunkRef = doc(db, 'artifacts', appId, 'public', 'data', 'materials', matId, 'chunks', String(index));
@@ -827,7 +993,7 @@ export default function App() {
             data: chunkData
           });
         });
-        
+
         await Promise.all(chunkPromises);
       }
 
@@ -860,16 +1026,16 @@ export default function App() {
   // Broadcast Announcement
   const handleAddAnnSubmit = async (e) => {
     e.preventDefault();
-    if(!annMsg.trim()) return;
-    
+    if (!annMsg.trim()) return;
+
     showConfirm(`هل أنت متأكد من رغبتك في بث هذا الإشعار فوراً للطلاب؟\n\n"${annMsg}"\n\nسيتم إرسال الإشعار إلى: ${annCohort} - ${annMajor}`, async () => {
       setAnnStatus('جاري النشر...');
       try {
-        const finalCohort = (profile && profile.role === 'helper' && profile.assignedCohort && profile.assignedCohort !== 'كل الفرق') 
-          ? profile.assignedCohort 
+        const finalCohort = (profile && profile.role === 'helper' && profile.assignedCohort && profile.assignedCohort !== 'كل الفرق')
+          ? profile.assignedCohort
           : annCohort;
-        const finalMajor = (profile && profile.role === 'helper' && profile.assignedMajor && profile.assignedMajor !== 'كل التخصصات') 
-          ? profile.assignedMajor 
+        const finalMajor = (profile && profile.role === 'helper' && profile.assignedMajor && profile.assignedMajor !== 'كل التخصصات')
+          ? profile.assignedMajor
           : annMajor;
         const annRef = collection(db, 'artifacts', appId, 'public', 'data', 'announcements');
         await addDoc(annRef, {
@@ -880,7 +1046,7 @@ export default function App() {
           createdAt: serverTimestamp(),
           addedBy: profile.name
         });
-        
+
         logAdminAction('بث إشعار جديد', `تم بث إشعار جديد: ${annMsg}`);
         setAnnMsg('');
         setAnnStatus('');
@@ -972,11 +1138,11 @@ export default function App() {
     }
     setExamStatus('جاري حفظ الاختبار...');
     try {
-      const finalCohort = (profile && profile.role === 'helper' && profile.assignedCohort && profile.assignedCohort !== 'كل الفرق') 
-        ? profile.assignedCohort 
+      const finalCohort = (profile && profile.role === 'helper' && profile.assignedCohort && profile.assignedCohort !== 'كل الفرق')
+        ? profile.assignedCohort
         : examCohort;
-      const finalMajor = (profile && profile.role === 'helper' && profile.assignedMajor && profile.assignedMajor !== 'كل التخصصات') 
-        ? profile.assignedMajor 
+      const finalMajor = (profile && profile.role === 'helper' && profile.assignedMajor && profile.assignedMajor !== 'كل التخصصات')
+        ? profile.assignedMajor
         : examMajor;
       const examData = {
         title: examTitle,
@@ -1021,13 +1187,13 @@ export default function App() {
     }
     setSchedStatus('جاري حفظ واعتماد الجدول...');
     try {
-      const finalCohort = (profile && profile.role === 'helper' && profile.assignedCohort && profile.assignedCohort !== 'كل الفرق') 
-        ? profile.assignedCohort 
+      const finalCohort = (profile && profile.role === 'helper' && profile.assignedCohort && profile.assignedCohort !== 'كل الفرق')
+        ? profile.assignedCohort
         : schedCohort;
-      const finalMajor = (profile && profile.role === 'helper' && profile.assignedMajor && profile.assignedMajor !== 'كل التخصصات') 
-        ? profile.assignedMajor 
+      const finalMajor = (profile && profile.role === 'helper' && profile.assignedMajor && profile.assignedMajor !== 'كل التخصصات')
+        ? profile.assignedMajor
         : schedMajor;
-      
+
       const schedData = {
         title: schedTitle,
         type: schedType,
@@ -1042,10 +1208,10 @@ export default function App() {
 
       const schedRef = collection(db, 'artifacts', appId, 'public', 'data', 'exam_schedules');
       await addDoc(schedRef, schedData);
-      
+
       logAdminAction('إضافة جدول امتحانات', `تمت إضافة جدول: ${schedTitle}`);
       setSchedStatus('تم اعتماد وإصدار الجدول للطلاب بنجاح! 📅');
-      
+
       setSchedTitle('');
       setSchedNotes('');
       setSchedExams([]);
@@ -1080,14 +1246,14 @@ export default function App() {
       return;
     }
     setNewStaffStatus('جاري تسجيل الحساب...');
-    
+
     const secondaryApp = initializeApp(firebaseConfig, 'SecondaryStaffApp');
     const secondaryAuth = getAuth(secondaryApp);
-    
+
     try {
       const userCredential = await createUserWithEmailAndPassword(secondaryAuth, newStaffEmail, newStaffPassword);
       const newUid = userCredential.user.uid;
-      
+
       const userDocRef = doc(db, 'artifacts', appId, 'users', newUid, 'profile', 'details');
       await setDoc(userDocRef, {
         name: newStaffName,
@@ -1103,7 +1269,7 @@ export default function App() {
         avatarUrl: '',
         createdAt: new Date().toISOString()
       });
-      
+
       const publicDirRef = doc(db, 'artifacts', appId, 'public', 'data', 'student_directory', newUid);
       await setDoc(publicDirRef, {
         name: newStaffName,
@@ -1115,7 +1281,7 @@ export default function App() {
         assignedMajor: newStaffMajor,
         phone: 'لا يوجد'
       });
-      
+
       setNewStaffName('');
       setNewStaffEmail('');
       setNewStaffPassword('');
@@ -1133,7 +1299,7 @@ export default function App() {
   const handleSubmitEssayGrading = async (e) => {
     e.preventDefault();
     if (!selectedSub) return;
-    
+
     // Calculate total essay grade
     let additionalEssayScore = 0;
     Object.keys(essayGradeInput).forEach(idx => {
@@ -1219,7 +1385,7 @@ export default function App() {
     return (
       <div className="min-h-screen flex items-center justify-center p-4">
         <div className="admin-card w-full max-w-md p-8 text-right shadow-2xl relative overflow-hidden border border-yellow-500/25">
-          
+
           <div className="absolute -top-20 -right-20 w-44 h-44 bg-yellow-500/10 rounded-full blur-3xl pointer-events-none"></div>
           <div className="absolute -bottom-20 -left-20 w-44 h-44 bg-[#bfebd4]/10 rounded-full blur-3xl pointer-events-none"></div>
 
@@ -1253,11 +1419,11 @@ export default function App() {
           <form onSubmit={handleLogin} className="space-y-4">
             <div>
               <label className="block text-xs font-black text-slate-600 dark:text-slate-300 mb-1.5">البريد الإلكتروني المهني</label>
-              <input 
-                type="email" 
+              <input
+                type="email"
                 required
                 value={email}
-                onChange={e=>setEmail(e.target.value)}
+                onChange={e => setEmail(e.target.value)}
                 placeholder="admin@taiba.edu.eg"
                 className="w-full px-4 py-3 rounded-2xl admin-input font-bold text-sm text-left focus:outline-none"
               />
@@ -1265,11 +1431,11 @@ export default function App() {
 
             <div>
               <label className="block text-xs font-black text-slate-600 dark:text-slate-300 mb-1.5">كلمة مرور لوحة التحكم</label>
-              <input 
-                type="password" 
+              <input
+                type="password"
                 required
                 value={password}
-                onChange={e=>setPassword(e.target.value)}
+                onChange={e => setPassword(e.target.value)}
                 placeholder="••••••••"
                 className="w-full px-4 py-3 rounded-2xl admin-input font-bold text-sm text-left focus:outline-none"
               />
@@ -1296,6 +1462,11 @@ export default function App() {
   }
 
   // ADMIN APPLICATION MAIN COCKPIT
+  const unreadAdminGroupCount = adminGroupMessages.filter(m => m.senderId !== profile?.uid && (m.timestamp?.toMillis() || 0) > lastSeenAdminGroupChat).length;
+  const allowedCohortsForProfile = profile?.role === 'admin'
+    ? COHORTS
+    : (profile?.allowedCohorts && profile.allowedCohorts.length > 0 ? profile.allowedCohorts : COHORTS);
+
   return (
     <div className="min-h-screen flex flex-col font-sans transition-colors duration-300">
       {/* Disclaimer Moving Ticker Bar */}
@@ -1314,12 +1485,12 @@ export default function App() {
           </div>
         </div>
       </div>
-      
+
       {/* Top Header Navbar */}
       <header className="sidebar-panel border-b px-6 py-4 flex items-center justify-between relative z-10 shadow-md">
         <div className="flex items-center gap-3">
           {/* Hamburger Menu Toggle on Mobile */}
-          <button 
+          <button
             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
             className="md:hidden p-2 rounded-xl bg-[#1a8e9e]/10 border border-[#1a8e9e]/30 dark:bg-slate-800 dark:border-slate-700 text-[#0e5e6f] dark:text-slate-300 transition hover:scale-105 active:scale-95 cursor-pointer flex items-center justify-center"
             title="القائمة"
@@ -1340,9 +1511,85 @@ export default function App() {
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          {/* Dark / Light Toggle */}
-          <button 
+        <div className="flex items-center gap-3">
+          {/* Notification Bell for Admin Mentions */}
+          <div className="relative">
+            <button
+              onClick={() => setNotiDropdownOpen(!notiDropdownOpen)}
+              className="p-2 rounded-xl bg-[#bfebd4]/35 hover:bg-[#bfebd4]/60 text-[#0e5e6f] dark:text-[#bfebd4] transition relative cursor-pointer flex items-center justify-center border border-[#82af96]/30"
+              title="تنبيهات المنشن والذكر"
+            >
+              <Bell size={16} />
+              {adminMentions.filter(m => !m.read).length > 0 && (
+                <span className="absolute -top-1 -right-1 bg-rose-600 text-white font-black text-[9px] w-4.5 h-4.5 rounded-full flex items-center justify-center animate-bounce shadow-md">
+                  {adminMentions.filter(m => !m.read).length}
+                </span>
+              )}
+            </button>
+
+            {/* Mentions Dropdown Modal */}
+            {notiDropdownOpen && (
+              <div className="absolute left-0 mt-2.5 w-72 md:w-80 bg-white dark:bg-[#09171a] border-2 border-[#82af96] dark:border-[#3c6550] rounded-2xl shadow-2xl p-4 z-[999] overflow-hidden" dir="rtl">
+                <h4 className="font-black text-xs md:text-sm text-[#0e5e6f] dark:text-[#bfebd4] mb-3 border-b-2 border-[#82af96]/30 pb-2 flex justify-between items-center">
+                  <span>🔔 إشارات ذكرك (Mentions)</span>
+                  <button
+                    onClick={async () => {
+                      // Mark all as read
+                      adminMentions.forEach(async (m) => {
+                        if (!m.read) {
+                          await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'admin_mentions', m.id), { read: true });
+                        }
+                      });
+                    }}
+                    className="text-[10px] text-teal-600 dark:text-teal-400 hover:underline cursor-pointer"
+                  >
+                    تحديد الكل كمقروء
+                  </button>
+                </h4>
+                <div className="flex flex-col gap-2 max-h-60 overflow-y-auto pr-1">
+                  {adminMentions.length === 0 ? (
+                    <p className="text-xs text-slate-500 font-bold py-4 text-center">لا توجد إشارات ذكر حالياً.</p>
+                  ) : (
+                    adminMentions.map(m => (
+                      <div
+                        key={m.id}
+                        onClick={async () => {
+                          // Mark as read
+                          if (!m.read) {
+                            await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'admin_mentions', m.id), { read: true });
+                          }
+                          setNotiDropdownOpen(false);
+                          // Navigate to chat cohort
+                          setAdminChatCohort(m.cohort);
+                          setAdminChatMajor(m.major);
+                          setCurrentTab('admin_chat');
+                        }}
+                        className={`p-2.5 rounded-xl border transition cursor-pointer text-right flex flex-col gap-1
+                            ${m.read
+                            ? 'bg-slate-50/50 dark:bg-black/10 border-slate-200 dark:border-slate-800'
+                            : 'bg-amber-500/10 border-amber-300 dark:border-amber-700 hover:bg-amber-500/25'}
+                          `}
+                      >
+                        <div className="flex justify-between items-center">
+                          <span className="text-[10px] font-black text-[#0e5e6f] dark:text-[#bfebd4]">
+                            👤 {m.mentionerName}
+                          </span>
+                          <span className="text-[9px] font-bold text-slate-500 dark:text-slate-400 bg-slate-200 dark:bg-black/45 px-1.5 py-0.5 rounded-md">
+                            {m.cohort}
+                          </span>
+                        </div>
+                        <p className="text-[10px] text-slate-800 dark:text-slate-300 font-medium line-clamp-2">
+                          "{m.text}"
+                        </p>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
+          <button
             onClick={handleLogout}
             className="p-2 px-2.5 sm:px-3 rounded-xl bg-rose-600/10 hover:bg-rose-600/20 text-rose-600 dark:text-rose-400 transition flex items-center gap-1.5 text-xs font-black cursor-pointer"
           >
@@ -1354,21 +1601,20 @@ export default function App() {
 
       {/* Main Layout Container */}
       <div className="flex-1 flex flex-col md:flex-row relative">
-        
+
         {/* Backdrop overlay for mobile drawer */}
         {isMobileMenuOpen && (
-          <div 
+          <div
             onClick={() => setIsMobileMenuOpen(false)}
             className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 md:hidden transition-opacity duration-300"
           />
         )}
 
         {/* Sidebar Menu Panel */}
-        <aside className={`w-72 md:w-64 sidebar-panel p-4 space-y-2 flex flex-col fixed md:relative top-[73px] md:top-0 bottom-0 md:bottom-auto right-0 z-40 transform transition-transform duration-300 ease-in-out ${
-          isMobileMenuOpen ? 'translate-x-0' : 'translate-x-full md:translate-x-0'
-        }`}>
-          
-          <button 
+        <aside className={`w-72 md:w-64 sidebar-panel p-4 space-y-2 flex flex-col fixed md:relative top-[73px] md:top-0 bottom-0 md:bottom-auto right-0 z-40 transform transition-transform duration-300 ease-in-out ${isMobileMenuOpen ? 'translate-x-0' : 'translate-x-full md:translate-x-0'
+          }`}>
+
+          <button
             onClick={() => setCurrentTab('overview')}
             className={`w-full p-3.5 flex items-center justify-between text-xs font-black sidebar-btn ${currentTab === 'overview' ? 'active' : ''}`}
           >
@@ -1377,57 +1623,77 @@ export default function App() {
             </span>
           </button>
 
-          {profile.role === 'admin' && (
-            <>
-              <button 
-                onClick={() => setCurrentTab('students')}
-                className={`w-full p-3.5 flex items-center justify-between text-xs font-black sidebar-btn ${currentTab === 'students' ? 'active' : ''}`}
-              >
-                <span className="flex items-center gap-2.5">
-                  <Users size={16} /> شؤون الطلاب (الأكاديمية)
-                </span>
-                <span className="bg-yellow-500/20 text-yellow-600 dark:text-yellow-400 px-2 py-0.5 rounded-full text-[10px] font-black">
-                  {students.filter(s => !s.role || s.role === 'student').length}
-                </span>
-              </button>
-
-              <button 
-                onClick={() => setCurrentTab('staff')}
-                className={`w-full p-3.5 flex items-center justify-between text-xs font-black sidebar-btn ${currentTab === 'staff' ? 'active' : ''}`}
-              >
-                <span className="flex items-center gap-2.5">
-                  <Shield size={16} /> طاقم الإشراف والمساعدين
-                </span>
-                <span className="bg-yellow-500/20 text-yellow-600 dark:text-yellow-400 px-2 py-0.5 rounded-full text-[10px] font-black">
-                  {students.filter(s => s.role === 'admin' || s.role === 'helper').length}
-                </span>
-              </button>
-            </>
+          {(profile.role === 'admin' || (profile.role === 'helper' && profile.permissions?.canManageStudents)) && (
+            <button
+              onClick={() => setCurrentTab('students')}
+              className={`w-full p-3.5 flex items-center justify-between text-xs font-black sidebar-btn ${currentTab === 'students' ? 'active' : ''}`}
+            >
+              <span className="flex items-center gap-2.5">
+                <Users size={16} /> شؤون الطلاب (الأكاديمية)
+              </span>
+              <span className="bg-yellow-500/20 text-yellow-600 dark:text-yellow-400 px-2 py-0.5 rounded-full text-[10px] font-black">
+                {students.filter(s => !s.role || s.role === 'student').length}
+              </span>
+            </button>
           )}
 
-          <button 
-            onClick={() => setCurrentTab('reports')}
-            className={`w-full p-3.5 flex items-center justify-between text-xs font-black sidebar-btn ${currentTab === 'reports' ? 'active' : ''}`}
-          >
-            <span className="flex items-center gap-2.5">
-              <ShieldAlert size={16} /> شكاوى وبلاغات الطلاب
-            </span>
-            <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${getFilteredReports().length > 0 ? 'bg-rose-500 text-white animate-pulse' : 'bg-slate-500/20 text-slate-400'}`}>
-              {getFilteredReports().length}
-            </span>
-          </button>
+          {profile.role === 'admin' && (
+            <button
+              onClick={() => setCurrentTab('staff')}
+              className={`w-full p-3.5 flex items-center justify-between text-xs font-black sidebar-btn ${currentTab === 'staff' ? 'active' : ''}`}
+            >
+              <span className="flex items-center gap-2.5">
+                <Shield size={16} /> طاقم الإشراف والمساعدين
+              </span>
+              <span className="bg-yellow-500/20 text-yellow-600 dark:text-yellow-400 px-2 py-0.5 rounded-full text-[10px] font-black">
+                {students.filter(s => s.role === 'admin' || s.role === 'helper').length}
+              </span>
+            </button>
+          )}
 
-          <button 
-            onClick={() => setCurrentTab('materials')}
-            className={`w-full p-3.5 flex items-center justify-between text-xs font-black sidebar-btn ${currentTab === 'materials' ? 'active' : ''}`}
-          >
-            <span className="flex items-center gap-2.5">
-              <FileText size={16} /> إدارة المقررات والملخصات
-            </span>
-            <span className="bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 px-2 py-0.5 rounded-full text-[10px] font-black">{materials.length}</span>
-          </button>
+          {(profile.role === 'admin' || (profile.role === 'helper' && profile.permissions?.canManageChat)) && (
+            <button
+              onClick={() => setCurrentTab('admin_chat')}
+              className={`w-full p-3.5 flex items-center justify-between text-xs font-black sidebar-btn ${currentTab === 'admin_chat' ? 'active' : ''}`}
+            >
+              <span className="flex items-center gap-2.5">
+                <MessageCircle size={16} /> الشات الجامعي
+              </span>
+              {unreadAdminGroupCount > 0 && (
+                <span className="bg-rose-600 text-white font-black text-[10px] w-5 h-5 rounded-full flex items-center justify-center animate-bounce shrink-0 shadow-md">
+                  {unreadAdminGroupCount}
+                </span>
+              )}
+            </button>
+          )}
 
-          <button 
+          {(profile.role === 'admin' || (profile.role === 'helper' && profile.permissions?.canManageReports)) && (
+            <button
+              onClick={() => setCurrentTab('reports')}
+              className={`w-full p-3.5 flex items-center justify-between text-xs font-black sidebar-btn ${currentTab === 'reports' ? 'active' : ''}`}
+            >
+              <span className="flex items-center gap-2.5">
+                <Flag size={16} /> الرقابة والبلاغات (شات وحسابات)
+              </span>
+              <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${chatReports.length > 0 || getFilteredReports().length > 0 ? 'bg-rose-500 text-white animate-pulse' : 'bg-slate-500/20 text-slate-400'}`}>
+                {chatReports.length + getFilteredReports().length}
+              </span>
+            </button>
+          )}
+
+          {(profile.role === 'admin' || (profile.role === 'helper' && profile.permissions?.canUploadMaterials)) && (
+            <button
+              onClick={() => setCurrentTab('materials')}
+              className={`w-full p-3.5 flex items-center justify-between text-xs font-black sidebar-btn ${currentTab === 'materials' ? 'active' : ''}`}
+            >
+              <span className="flex items-center gap-2.5">
+                <FileText size={16} /> إدارة المقررات والملخصات
+              </span>
+              <span className="bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 px-2 py-0.5 rounded-full text-[10px] font-black">{materials.length}</span>
+            </button>
+          )}
+
+          <button
             onClick={() => setCurrentTab('announcements')}
             className={`w-full p-3.5 flex items-center justify-between text-xs font-black sidebar-btn ${currentTab === 'announcements' ? 'active' : ''}`}
           >
@@ -1437,46 +1703,51 @@ export default function App() {
             <span className="bg-sky-500/20 text-sky-600 dark:text-sky-400 px-2 py-0.5 rounded-full text-[10px] font-black">{announcements.length}</span>
           </button>
 
-          <button 
-            onClick={() => setCurrentTab('exams')}
-            className={`w-full p-3.5 flex items-center justify-between text-xs font-black sidebar-btn ${currentTab === 'exams' ? 'active' : ''}`}
-          >
-            <span className="flex items-center gap-2.5">
-              <FileQuestion size={16} /> صانع الامتحانات والبابل شيت
-            </span>
-            <span className="bg-purple-500/20 text-purple-600 dark:text-purple-400 px-2 py-0.5 rounded-full text-[10px] font-black">{exams.length}</span>
-          </button>
+          {(profile.role === 'admin' || (profile.role === 'helper' && profile.permissions?.canUploadExams)) && (
+            <>
+              <button
+                onClick={() => setCurrentTab('exams')}
+                className={`w-full p-3.5 flex items-center justify-between text-xs font-black sidebar-btn ${currentTab === 'exams' ? 'active' : ''}`}
+              >
+                <span className="flex items-center gap-2.5">
+                  <FileQuestion size={16} /> صانع الامتحانات والبابل شيت
+                </span>
+                <span className="bg-purple-500/20 text-purple-600 dark:text-purple-400 px-2 py-0.5 rounded-full text-[10px] font-black">{exams.length}</span>
+              </button>
 
-          <button 
-            onClick={() => setCurrentTab('results')}
-            className={`w-full p-3.5 flex items-center justify-between text-xs font-black sidebar-btn ${currentTab === 'results' ? 'active' : ''}`}
-          >
-            <span className="flex items-center gap-2.5">
-              <GraduationCap size={16} /> نتائج الطلاب وتصحيح المقالي
-            </span>
-            <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
-              submissions.filter(s => s.status === 'pending').length > 0
-                ? 'bg-amber-500 text-white animate-pulse'
-                : 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400'
-            }`}>
-              {submissions.length}
-            </span>
-          </button>
+              <button
+                onClick={() => setCurrentTab('results')}
+                className={`w-full p-3.5 flex items-center justify-between text-xs font-black sidebar-btn ${currentTab === 'results' ? 'active' : ''}`}
+              >
+                <span className="flex items-center gap-2.5">
+                  <GraduationCap size={16} /> نتائج الطلاب وتصحيح المقالي
+                </span>
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${submissions.filter(s => s.status === 'pending').length > 0
+                  ? 'bg-amber-500 text-white animate-pulse'
+                  : 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400'
+                  }`}>
+                  {submissions.length}
+                </span>
+              </button>
+            </>
+          )}
 
           {/* Removed Firebase Data Initialization button as per request */}
 
-          <button 
-            onClick={() => setCurrentTab('schedules')}
-            className={`w-full p-3.5 flex items-center justify-between text-xs font-black sidebar-btn ${currentTab === 'schedules' ? 'active' : ''}`}
-          >
-            <span className="flex items-center gap-2.5">
-              <Calendar size={16} /> جداول الامتحانات
-            </span>
-            <span className="bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 px-2 py-0.5 rounded-full text-[10px] font-black">{schedules.length}</span>
-          </button>
+          {(profile.role === 'admin' || (profile.role === 'helper' && profile.permissions?.canUploadSchedules)) && (
+            <button
+              onClick={() => setCurrentTab('schedules')}
+              className={`w-full p-3.5 flex items-center justify-between text-xs font-black sidebar-btn ${currentTab === 'schedules' ? 'active' : ''}`}
+            >
+              <span className="flex items-center gap-2.5">
+                <Calendar size={16} /> جداول الامتحانات
+              </span>
+              <span className="bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 px-2 py-0.5 rounded-full text-[10px] font-black">{schedules.length}</span>
+            </button>
+          )}
 
           {profile.role === 'admin' && (
-            <button 
+            <button
               onClick={() => setCurrentTab('logs')}
               className={`w-full p-3.5 flex items-center justify-between text-xs font-black sidebar-btn ${currentTab === 'logs' ? 'active' : ''}`}
             >
@@ -1491,14 +1762,14 @@ export default function App() {
 
         {/* Content Body Pane */}
         <main className="flex-1 p-6 overflow-y-auto text-right bg-transparent transition-all duration-300">
-          
+
           {/* TAB 1: OVERVIEW */}
           {currentTab === 'overview' && (
             <div className="space-y-6 fade-in">
               <h2 className="text-xl font-black border-r-4 border-yellow-500 pr-3 gradient-text-gold">لوحة الإحصائيات العامة</h2>
-              
+
               <div className={`grid grid-cols-1 sm:grid-cols-2 ${profile.role === 'admin' ? 'lg:grid-cols-4' : 'lg:grid-cols-3'} gap-6`}>
-                
+
                 <div className="admin-card p-6 flex flex-col justify-between min-h-[120px]">
                   <span className="text-[10px] text-slate-500 dark:text-slate-400 font-extrabold tracking-widest uppercase">الطلاب المسجلين</span>
                   <span className="block text-3xl font-black text-yellow-600 dark:text-yellow-500 mt-2">
@@ -1524,8 +1795,8 @@ export default function App() {
 
                 <div className="admin-card p-6 flex flex-col justify-between min-h-[120px]">
                   <span className="text-[10px] text-slate-500 dark:text-slate-400 font-extrabold tracking-widest uppercase">البلاغات المعلقة</span>
-                  <span className={`block text-3xl font-black mt-2 ${getFilteredReports().length > 0 ? 'text-rose-600 dark:text-rose-500' : 'text-slate-500 dark:text-slate-400'}`}>
-                    {getFilteredReports().length} شكوى
+                  <span className={`block text-3xl font-black mt-2 ${getFilteredReports().length + chatReports.length > 0 ? 'text-rose-600 dark:text-rose-500' : 'text-slate-500 dark:text-slate-400'}`}>
+                    {getFilteredReports().length + chatReports.length} شكوى
                   </span>
                 </div>
 
@@ -1555,14 +1826,14 @@ export default function App() {
             <div className="space-y-6 fade-in">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <h2 className="text-xl font-black border-r-4 border-yellow-500 pr-3 gradient-text-gold">شؤون الطلاب وإدارة الحسابات الأكاديمية</h2>
-                
+
                 {/* Search */}
                 <div className="relative">
-                  <input 
-                    type="text" 
+                  <input
+                    type="text"
                     placeholder="ابحث عن اسم، هاتف، أو رقم أكاديمي..."
                     value={searchQuery}
-                    onChange={e=>setSearchQuery(e.target.value)}
+                    onChange={e => setSearchQuery(e.target.value)}
                     className="w-full sm:w-80 px-4 py-2.5 admin-input text-xs font-bold focus:outline-none"
                   />
                   <Search className="absolute left-3 top-3 text-slate-400 dark:text-slate-500" size={14} />
@@ -1583,8 +1854,8 @@ export default function App() {
                   <tbody>
                     {students
                       .filter(s => !s.role || s.role === 'student')
-                      .filter(s => 
-                        s.name.includes(searchQuery) || 
+                      .filter(s =>
+                        s.name.includes(searchQuery) ||
                         (s.studentId && s.studentId.includes(searchQuery)) ||
                         (s.phone && s.phone.includes(searchQuery))
                       )
@@ -1592,9 +1863,9 @@ export default function App() {
                         <tr key={student.id}>
                           <td className="p-4 font-bold">
                             <div className="flex items-center gap-2.5">
-                              <img 
-                                src={student.avatarUrl || (student.gender === 'أنثى' ? 'https://api.dicebear.com/7.x/avataaars/svg?seed=Tiera' : 'https://api.dicebear.com/7.x/avataaars/svg?seed=Christian')} 
-                                alt="" 
+                              <img
+                                src={student.avatarUrl || (student.gender === 'أنثى' ? 'https://api.dicebear.com/7.x/avataaars/svg?seed=Tiera' : 'https://api.dicebear.com/7.x/avataaars/svg?seed=Christian')}
+                                alt=""
                                 className="w-8 h-8 rounded-full bg-slate-800 border border-slate-700/50"
                               />
                               <div>
@@ -1606,12 +1877,12 @@ export default function App() {
                                     </span>
                                   )}
                                 </span>
-                                <span className="text-[10px] text-slate-500 dark:text-slate-400">{student.email || 'لا يوجد بريد'}</span>
+                                <span className="text-[10px] text-slate-500 dark:text-slate-400">{student.realEmail || student.email || 'لا يوجد بريد'}</span>
                               </div>
                             </div>
                           </td>
                           <td className="p-4 font-extrabold text-[#0e5e6f] dark:text-[#bfebd4]" dir="ltr">
-                            {student.phone || 'لا يوجد هاتف 📞'}
+                            {student.realPhone || student.phone || 'لا يوجد هاتف 📞'}
                           </td>
                           <td className="p-4 font-extrabold text-[#0e5e6f] dark:text-[#bfebd4]" dir="ltr">{student.studentId || 'N/A'}</td>
                           <td className="p-4 font-bold text-slate-700 dark:text-slate-300">
@@ -1619,29 +1890,28 @@ export default function App() {
                             <span className="text-[10px] text-slate-500">{student.major}</span>
                           </td>
                           <td className="p-4 flex justify-center gap-2">
-                            <button 
+                            <button
                               onClick={() => handleUpdateRole(student.id, 'admin')}
                               className="px-2.5 py-1.5 btn-rose rounded-xl font-black text-[9px] cursor-pointer hover:scale-105 active:scale-95 transition"
                             >
                               ترقية لمدير 👑
                             </button>
-                            <button 
+                            <button
                               onClick={() => handleUpdateRole(student.id, 'helper')}
                               className="px-2.5 py-1.5 btn-gold text-slate-900 rounded-xl font-black text-[9px] cursor-pointer hover:scale-105 active:scale-95 transition"
                             >
                               ترقية لمساعد 🎖️
                             </button>
-                            <button 
+                            <button
                               onClick={() => handleToggleBanStudent(student.id, student.name, student.isBanned)}
-                              className={`px-2.5 py-1.5 border rounded-xl font-black text-[9px] cursor-pointer transition ${
-                                student.isBanned 
-                                  ? 'bg-emerald-600/10 hover:bg-emerald-600/30 border-emerald-500/20 text-emerald-600 dark:text-emerald-400'
-                                  : 'bg-amber-600/10 hover:bg-amber-600/30 border-amber-500/20 text-amber-600 dark:text-amber-400'
-                              }`}
+                              className={`px-2.5 py-1.5 border rounded-xl font-black text-[9px] cursor-pointer transition ${student.isBanned
+                                ? 'bg-emerald-600/10 hover:bg-emerald-600/30 border-emerald-500/20 text-emerald-600 dark:text-emerald-400'
+                                : 'bg-amber-600/10 hover:bg-amber-600/30 border-amber-500/20 text-amber-600 dark:text-amber-400'
+                                }`}
                             >
                               {student.isBanned ? 'فك الحظر 🔓' : 'حظر الطالب 🚫'}
                             </button>
-                            <button 
+                            <button
                               onClick={() => handleDeleteStudent(student.id, student.name)}
                               className="px-2.5 py-1.5 bg-rose-600/10 hover:bg-rose-600/30 border border-rose-500/20 text-rose-600 dark:text-rose-400 rounded-xl font-black text-[9px] cursor-pointer transition"
                             >
@@ -1661,67 +1931,67 @@ export default function App() {
             <div className="space-y-6 fade-in">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <h2 className="text-xl font-black border-r-4 border-yellow-500 pr-3 gradient-text-gold">إدارة طاقم المشرفين والمساعدين</h2>
-                
+
                 {/* Search */}
                 <div className="relative">
-                  <input 
-                    type="text" 
+                  <input
+                    type="text"
                     placeholder="ابحث عن مشرف..."
                     value={searchQuery}
-                    onChange={e=>setSearchQuery(e.target.value)}
+                    onChange={e => setSearchQuery(e.target.value)}
                     className="w-full sm:w-80 px-4 py-2.5 admin-input text-xs font-bold focus:outline-none"
                   />
                   <Search className="absolute left-3 top-3 text-slate-400 dark:text-slate-500" size={14} />
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-                {/* Right side: Add New Staff Form (4 cols) */}
-                <div className="lg:col-span-4 admin-card p-6 space-y-4">
+              <div className="flex flex-col gap-6">
+                {/* Top part: Add New Staff Form */}
+                <div className="admin-card p-6 space-y-4">
                   <h3 className="text-md font-black border-r-4 border-yellow-500 pr-2 gradient-text-gold">إضافة عضو طاقم جديد</h3>
-                  
+
                   <form onSubmit={handleAddStaffSubmit} className="space-y-4 text-right">
                     <div>
                       <label className="block text-[10px] font-black text-slate-500 dark:text-slate-400 mb-1">الاسم الكامل للمشرف/المساعد</label>
-                      <input 
-                        type="text" 
-                        required 
+                      <input
+                        type="text"
+                        required
                         placeholder="مثال: أ. محمود محمد"
                         value={newStaffName}
-                        onChange={e=>setNewStaffName(e.target.value)}
+                        onChange={e => setNewStaffName(e.target.value)}
                         className="w-full px-4 py-2.5 admin-input font-bold text-xs focus:outline-none"
                       />
                     </div>
 
                     <div>
                       <label className="block text-[10px] font-black text-slate-500 dark:text-slate-400 mb-1">البريد الإلكتروني المهني</label>
-                      <input 
-                        type="email" 
-                        required 
+                      <input
+                        type="email"
+                        required
                         placeholder="example@taiba.edu.eg"
                         value={newStaffEmail}
-                        onChange={e=>setNewStaffEmail(e.target.value)}
+                        onChange={e => setNewStaffEmail(e.target.value)}
                         className="w-full px-4 py-2.5 admin-input font-bold text-xs text-left focus:outline-none"
                       />
                     </div>
 
                     <div>
                       <label className="block text-[10px] font-black text-slate-500 dark:text-slate-400 mb-1">كلمة مرور الحساب</label>
-                      <input 
-                        type="password" 
-                        required 
+                      <input
+                        type="password"
+                        required
                         placeholder="••••••••"
                         value={newStaffPassword}
-                        onChange={e=>setNewStaffPassword(e.target.value)}
+                        onChange={e => setNewStaffPassword(e.target.value)}
                         className="w-full px-4 py-2.5 admin-input font-bold text-xs text-left focus:outline-none"
                       />
                     </div>
 
                     <div>
                       <label className="block text-[10px] font-black text-slate-500 dark:text-slate-400 mb-1">صلاحية ودور الموظف</label>
-                      <select 
-                        value={newStaffRole} 
-                        onChange={e=>setNewStaffRole(e.target.value)}
+                      <select
+                        value={newStaffRole}
+                        onChange={e => setNewStaffRole(e.target.value)}
                         className="w-full px-3 py-2.5 admin-input font-bold text-xs focus:outline-none"
                       >
                         <option value="helper">مساعد مشرف (Helper) - لا يمكنه مسح الطلاب أو إدارة الطاقم</option>
@@ -1731,9 +2001,9 @@ export default function App() {
 
                     <div>
                       <label className="block text-[10px] font-black text-slate-500 dark:text-slate-400 mb-1">الفرقة المسندة (اختصاص المشرف)</label>
-                      <select 
-                        value={newStaffCohort} 
-                        onChange={e=>setNewStaffCohort(e.target.value)}
+                      <select
+                        value={newStaffCohort}
+                        onChange={e => setNewStaffCohort(e.target.value)}
                         className="w-full px-3 py-2.5 admin-input font-bold text-xs focus:outline-none"
                       >
                         <option value="كل الفرق">كل الفرق الدراسية (وصول كامل) 🌐</option>
@@ -1745,9 +2015,9 @@ export default function App() {
 
                     <div>
                       <label className="block text-[10px] font-black text-slate-500 dark:text-slate-400 mb-1">التخصص المسند (اختصاص المشرف)</label>
-                      <select 
-                        value={newStaffMajor} 
-                        onChange={e=>setNewStaffMajor(e.target.value)}
+                      <select
+                        value={newStaffMajor}
+                        onChange={e => setNewStaffMajor(e.target.value)}
                         className="w-full px-3 py-2.5 admin-input font-bold text-xs focus:outline-none"
                       >
                         <option value="كل التخصصات">كل التخصصات (وصول كامل) 🎓</option>
@@ -1757,8 +2027,8 @@ export default function App() {
                       </select>
                     </div>
 
-                    <button 
-                      type="submit" 
+                    <button
+                      type="submit"
                       className="w-full py-3 btn-gold text-slate-950 font-black rounded-2xl text-xs shadow-md transition cursor-pointer"
                     >
                       تسجيل وتفعيل الحساب 👑
@@ -1767,59 +2037,75 @@ export default function App() {
                   </form>
                 </div>
 
-                {/* Left side: Staff Directory List Table (8 cols) */}
-                <div className="lg:col-span-8 admin-card p-4 overflow-x-auto">
+                {/* Bottom part: Staff Directory List Table */}
+                <div className="admin-card p-4 overflow-x-auto">
                   <table className="admin-table text-xs text-right">
                     <thead className="text-[#0e5e6f] dark:text-[#bfebd4] font-black">
                       <tr>
                         <th className="p-4">الاسم والبريد</th>
                         <th className="p-4">الرقم التعريفي</th>
-                        <th className="p-4">الفرقة المسندة</th>
-                        <th className="p-4">التخصص المسند</th>
-                        <th className="p-4">الدور الحالي</th>
-                        <th className="p-4 text-center">تعديل الصلاحيات</th>
+                        <th className="p-4">الاسم المستعار (Nickname)</th>
+                        <th className="p-4">الفرقة والتخصص</th>
+                        <th className="p-4">صلاحيات المساعد</th>
+                        <th className="p-4 text-center">الرتبة والإجراءات</th>
                       </tr>
                     </thead>
                     <tbody>
                       {students
                         .filter(s => s.role === 'admin' || s.role === 'helper')
-                        .filter(s => 
-                          s.name.includes(searchQuery) || 
+                        .filter(s =>
+                          s.name.includes(searchQuery) ||
                           (s.studentId && s.studentId.includes(searchQuery))
                         )
                         .map(staff => (
                           <tr key={staff.id}>
                             <td className="p-4 font-bold">
                               <div className="flex items-center gap-2.5">
-                                <img 
-                                  src={staff.avatarUrl || (staff.gender === 'أنثى' ? 'https://api.dicebear.com/7.x/avataaars/svg?seed=Tiera' : 'https://api.dicebear.com/7.x/avataaars/svg?seed=Christian')} 
-                                  alt="" 
+                                <img
+                                  src={staff.avatarUrl || (staff.gender === 'أنثى' ? 'https://api.dicebear.com/7.x/avataaars/svg?seed=Tiera' : 'https://api.dicebear.com/7.x/avataaars/svg?seed=Christian')}
+                                  alt=""
                                   className="w-8 h-8 rounded-full bg-slate-800 border border-slate-700/50"
                                 />
                                 <div>
                                   <span className="block font-black">{staff.name}</span>
-                                  <span className="text-[10px] text-slate-500 dark:text-slate-400">{staff.email || 'لا يوجد بريد'}</span>
+                                  <span className="text-[10px] text-slate-500 dark:text-slate-400">{staff.realEmail || staff.email || 'لا يوجد بريد'}</span>
                                 </div>
                               </div>
                             </td>
                             <td className="p-4 font-extrabold text-[#0e5e6f] dark:text-[#bfebd4]" dir="ltr">{staff.studentId || 'N/A'}</td>
                             <td className="p-4">
+                              <input
+                                type="text"
+                                placeholder="الدعم الفني..."
+                                value={staff.adminNickname || ''}
+                                onChange={(e) => {
+                                  // Update locally first for smooth UI
+                                  const newStaff = [...students];
+                                  const idx = newStaff.findIndex(s => s.id === staff.id);
+                                  if (idx > -1) {
+                                    newStaff[idx].adminNickname = e.target.value;
+                                    setStudents(newStaff);
+                                  }
+                                }}
+                                onBlur={(e) => handleUpdateStaffNickname(staff.id, e.target.value)}
+                                className="w-24 px-2 py-1.5 rounded-lg admin-input font-black text-[9px] focus:outline-none"
+                              />
+                            </td>
+                            <td className="p-4 space-y-2">
                               <select
                                 value={staff.assignedCohort || 'كل الفرق'}
                                 onChange={(e) => handleUpdateStaffCohort(staff.id, e.target.value)}
-                                className="px-2 py-1.5 rounded-lg admin-input font-black text-[9px] focus:outline-none"
+                                className="w-full px-2 py-1.5 rounded-lg admin-input font-black text-[9px] focus:outline-none mb-2"
                               >
                                 <option value="كل الفرق">كل الفرق 🌐</option>
                                 {COHORTS.map((c, i) => (
                                   <option key={i} value={c}>{c}</option>
                                 ))}
                               </select>
-                            </td>
-                            <td className="p-4">
                               <select
                                 value={staff.assignedMajor || 'كل التخصصات'}
                                 onChange={(e) => handleUpdateStaffMajor(staff.id, e.target.value)}
-                                className="px-2 py-1.5 rounded-lg admin-input font-black text-[9px] focus:outline-none"
+                                className="w-full px-2 py-1.5 rounded-lg admin-input font-black text-[9px] focus:outline-none"
                               >
                                 <option value="كل التخصصات">كل التخصصات 🎓</option>
                                 {MAJORS.map((m, i) => (
@@ -1828,43 +2114,75 @@ export default function App() {
                               </select>
                             </td>
                             <td className="p-4">
-                              <span className={`px-2.5 py-1 rounded-full text-[9px] font-black ${
-                                staff.role === 'admin' 
-                                  ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20' 
-                                  : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20'
-                              }`}>
-                                {staff.role === 'admin' ? 'مدير نظام 🛡️' : 'مساعد مشرف 🎖️'}
-                              </span>
+                              {staff.role === 'helper' ? (
+                                <div className="space-y-1 text-[9px] font-bold">
+                                  {['canUploadMaterials', 'canUploadExams', 'canUploadSchedules', 'canManageChat', 'canManageAnnouncements', 'canManageStudents', 'canManageReports'].map(permKey => {
+                                    const labels = {
+                                      canUploadMaterials: 'المحاضرات 📚',
+                                      canUploadExams: 'الامتحانات 📝',
+                                      canUploadSchedules: 'الجداول 📅',
+                                      canManageChat: 'الشات 💬',
+                                      canManageAnnouncements: 'الإعلانات 📢',
+                                      canManageStudents: 'الطلاب 👥',
+                                      canManageReports: 'الرقابة 🚩'
+                                    };
+                                    return (
+                                      <label key={permKey} className="flex items-center gap-1.5 cursor-pointer">
+                                        <input
+                                          type="checkbox"
+                                          checked={staff.permissions?.[permKey] || false}
+                                          onChange={(e) => {
+                                            const newPerms = { ...(staff.permissions || {}), [permKey]: e.target.checked };
+                                            handleUpdateStaffPermissions(staff.id, newPerms);
+                                          }}
+                                          className="accent-[#0e5e6f]"
+                                        />
+                                        <span>{labels[permKey]}</span>
+                                      </label>
+                                    );
+                                  })}
+                                </div>
+                              ) : (
+                                <span className="text-[10px] text-emerald-500 font-bold italic">وصول كامل</span>
+                              )}
                             </td>
-                            <td className="p-4">
-                              <div className="flex justify-center gap-2">
+                            <td className="p-4 space-y-2">
+                              <div className="flex justify-center">
+                                <span className={`px-2.5 py-1 rounded-full text-[9px] font-black ${staff.role === 'admin'
+                                  ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20'
+                                  : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20'
+                                  }`}>
+                                  {staff.role === 'admin' ? 'مدير نظام 🛡️' : 'مساعد مشرف 🎖️'}
+                                </span>
+                              </div>
+                              <div className="flex justify-center gap-1 flex-wrap max-w-[120px] mx-auto">
                                 {staff.id !== user.uid ? (
                                   <>
                                     {staff.role === 'helper' && (
-                                      <button 
+                                      <button
                                         onClick={() => handleUpdateRole(staff.id, 'admin')}
-                                        className="px-2.5 py-1.5 btn-rose rounded-xl font-black text-[9px] cursor-pointer hover:scale-105 active:scale-95 transition"
+                                        className="px-2 py-1.5 btn-rose rounded-xl font-black text-[9px] cursor-pointer hover:scale-105 active:scale-95 transition"
                                       >
-                                        ترقية لمدير 👑
+                                        ترقية لمدير
                                       </button>
                                     )}
                                     {staff.role === 'admin' && (
-                                      <button 
+                                      <button
                                         onClick={() => handleUpdateRole(staff.id, 'helper')}
-                                        className="px-2.5 py-1.5 btn-gold text-slate-900 rounded-xl font-black text-[9px] cursor-pointer hover:scale-105 active:scale-95 transition"
+                                        className="px-2 py-1.5 btn-gold text-slate-900 rounded-xl font-black text-[9px] cursor-pointer hover:scale-105 active:scale-95 transition"
                                       >
-                                        تنزيل لمساعد 🎖️
+                                        تنزيل لمساعد
                                       </button>
                                     )}
-                                    <button 
+                                    <button
                                       onClick={() => handleUpdateRole(staff.id, 'student')}
-                                      className="px-2.5 py-1.5 btn-teal rounded-xl font-black text-[9px] cursor-pointer hover:scale-105 active:scale-95 transition"
+                                      className="px-2 py-1.5 btn-teal rounded-xl font-black text-[9px] cursor-pointer hover:scale-105 active:scale-95 transition"
                                     >
-                                      سحب الصلاحيات ↩️
+                                      سحب الصلاحيات
                                     </button>
                                   </>
                                 ) : (
-                                  <span className="text-[10px] text-slate-400 font-bold italic">حسابك الحالي (نشط)</span>
+                                  <span className="text-[10px] text-slate-400 font-bold italic block mt-1">حسابك (نشط)</span>
                                 )}
                               </div>
                             </td>
@@ -1880,15 +2198,15 @@ export default function App() {
           {/* TAB 3: REPORTS SYSTEM */}
           {currentTab === 'reports' && (profile.role === 'admin' || profile.role === 'helper') && (
             <div className="space-y-6 fade-in">
-              <h2 className="text-xl font-black border-r-4 border-yellow-500 pr-3 gradient-text-gold">شكاوى وبلاغات الطلاب ضد المضايقات</h2>
+              <h2 className="text-xl font-black border-r-4 border-yellow-500 pr-3 gradient-text-gold">الرقابة والبلاغات في الشات</h2>
 
-              {getFilteredReports().length === 0 ? (
+              {chatReports.length === 0 ? (
                 <div className="admin-card p-12 text-center text-slate-500 dark:text-slate-400 font-bold">
-                  🎉 لا توجد أي شكاوى أو بلاغات مسجلة حالياً! المنصة نظيفة تماماً.
+                  🎉 لا توجد أي بلاغات مسجلة حالياً! بيئة الشات نظيفة تماماً.
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {getFilteredReports().map((report) => (
+                  {chatReports.map((report) => (
                     <div key={report.id} className="admin-card p-6 space-y-4 text-right">
                       <div className="flex justify-between items-center border-b border-[#0e5e6f]/15 dark:border-slate-800 pb-3">
                         <div>
@@ -1896,29 +2214,61 @@ export default function App() {
                           <span className="block font-black text-[#0e5e6f] dark:text-[#bfebd4] text-xs">{report.reporterName}</span>
                         </div>
                         <div className="text-left">
-                          <span className="text-[10px] text-slate-500 dark:text-slate-400 font-black">الطالب المشكو في حقه:</span>
-                          <span className="block font-black text-rose-600 dark:text-rose-400 text-xs">{report.reportedName}</span>
+                          <span className="text-[10px] text-slate-500 dark:text-slate-400 font-black">صاحب الرسالة:</span>
+                          <span className="block font-black text-rose-600 dark:text-rose-400 text-xs">{report.senderName}</span>
                         </div>
                       </div>
 
                       <div className="bg-slate-500/5 dark:bg-slate-950/40 p-4 rounded-xl border border-[#0e5e6f]/10 dark:border-slate-800 text-xs leading-relaxed font-bold text-slate-700 dark:text-slate-200">
-                        💬 <strong>السبب:</strong> {report.reason}
+                        <p className="text-slate-500 text-[10px] mb-1">محتوى الرسالة المسيئة:</p>
+                        <p className="mb-3 text-sm">"{report.messageText}"</p>
+                        <hr className="border-slate-300 dark:border-slate-700 mb-3" />
+                        💬 <strong>سبب الإبلاغ:</strong> {report.reason}
                       </div>
 
-                      <div className="flex items-center justify-between text-[10px] text-slate-500 dark:text-slate-400">
-                        <span>التوقيت: {new Date(report.timestamp).toLocaleString('ar-EG')}</span>
-                        <div className="flex gap-2">
-                          <button 
-                            onClick={() => handleDeleteReport(report.id)}
-                            className="px-3 py-2 btn-teal text-white rounded-xl font-black cursor-pointer hover:scale-105 active:scale-95 transition"
+                      <div className="flex flex-col sm:flex-row items-center justify-between text-[10px] text-slate-500 dark:text-slate-400 gap-2">
+                        <span>الفرقة: {report.cohort}</span>
+                        <div className="flex gap-2 w-full sm:w-auto">
+                          <button
+                            onClick={async () => {
+                              try {
+                                await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'chat_reports', report.id));
+                                logAdminAction('تجاهل بلاغ شات', `تم تجاهل بلاغ من ${report.reporterName} ضد رسالة ${report.senderName}`);
+                                showAlert('تم مسح البلاغ وإغلاقه بنجاح.');
+                              } catch (e) { console.error(e); }
+                            }}
+                            className="flex-1 px-3 py-2 btn-teal text-white rounded-xl font-black cursor-pointer hover:scale-105 active:scale-95 transition"
                           >
-                            إغلاق الشكوى / تجاهل البلاغ 🔓
+                            تجاهل ومسح
                           </button>
-                          <button 
-                            onClick={() => handleDeleteStudent(report.reportedUid, report.reportedName)}
-                            className="px-3 py-2 btn-rose text-white rounded-xl font-black cursor-pointer hover:scale-105 active:scale-95 transition"
+                          <button
+                            onClick={async () => {
+                              try {
+                                // 1. Try to delete the original message safely
+                                try {
+                                  const cSafe = (report.cohort || '').replace(/\s+/g, '_');
+                                  const mSafe = (report.major || 'عام').replace(/\s+/g, '_');
+                                  const collName = report.chatCollection || `chat_${cSafe}_${mSafe}`;
+                                  if (collName && report.messageId) {
+                                    await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', collName, report.messageId));
+                                  }
+                                } catch (msgErr) {
+                                  console.warn("Could not delete original message, it might not exist:", msgErr);
+                                }
+
+                                // 2. Delete the report document itself (guaranteed to run)
+                                await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'chat_reports', report.id));
+
+                                logAdminAction('حذف رسالة وبلاغ', `تم حذف الرسالة المسيئة وإغلاق البلاغ بنجاح.`);
+                                showAlert('تم حذف الرسالة الأصلية من الشات ومسح البلاغ بنجاح.', 'تم الحذف 🗑️');
+                              } catch (e) {
+                                console.error("Failed to delete report:", e);
+                                showAlert('حدث خطأ أثناء حذف البلاغ.');
+                              }
+                            }}
+                            className="flex-1 px-3 py-2 btn-rose text-white rounded-xl font-black cursor-pointer hover:scale-105 active:scale-95 transition"
                           >
-                            إقصاء الطالب المشكو فيه 🚫
+                            حذف الرسالة والبلاغ 🚫
                           </button>
                         </div>
                       </div>
@@ -1929,24 +2279,67 @@ export default function App() {
             </div>
           )}
 
+          {/* TAB: ADMIN CHAT */}
+          {currentTab === 'admin_chat' && (profile.role === 'admin' || profile.role === 'helper') && (
+            <div className="space-y-6 fade-in h-[calc(100vh-120px)] flex flex-col">
+              <div className="flex items-center justify-between gap-4">
+                <h2 className="text-xl font-black border-r-4 border-[#0e5e6f] pr-3 text-[#0e5e6f] dark:text-[#bfebd4]">الشات الجامعي والإشراف المباشر</h2>
+                <div className="flex gap-2">
+                  <select
+                    value={adminChatCohort}
+                    onChange={(e) => setAdminChatCohort(e.target.value)}
+                    className="admin-input text-sm font-bold p-2 w-48"
+                  >
+                    {allowedCohortsForProfile.map(c => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
+                  </select>
+                  <select
+                    value={adminChatMajor}
+                    onChange={(e) => setAdminChatMajor(e.target.value)}
+                    className="admin-input text-sm font-bold p-2 w-48"
+                  >
+                    {MAJORS.map(m => (
+                      <option key={m} value={m}>{m}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex-1 overflow-hidden">
+                {/* 
+                    We pass a mock profile to AdminChatView so it treats us as an admin 
+                    belonging to the currently selected cohort and major
+                  */}
+                <AdminChatView
+                  profile={{ ...profile, cohort: adminChatCohort, major: adminChatMajor }}
+                  groupMessages={adminGroupMessages}
+                  privateMessages={[]}
+                  friendships={[]}
+                  studentDirectory={students}
+                />
+              </div>
+            </div>
+          )}
+
           {/* TAB 4: MATERIALS */}
           {currentTab === 'materials' && (
             <div className="space-y-6 fade-in">
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                
+
                 {/* Form Add Material */}
                 <div className="admin-card p-6 space-y-4">
                   <h3 className="text-md font-black border-r-4 border-yellow-500 pr-2 gradient-text-gold">نشر وتعميم ملف جديد</h3>
-                  
+
                   <form onSubmit={handleAddMaterialSubmit} className="space-y-3.5 text-right">
                     <div>
                       <label className="block text-[10px] font-black text-slate-500 dark:text-slate-400 mb-1">عنوان الملف</label>
-                      <input 
-                        type="text" 
-                        required 
+                      <input
+                        type="text"
+                        required
                         placeholder="مثال: مراجعة هندسة الحاسوب"
                         value={matTitle}
-                        onChange={e=>setMatTitle(e.target.value)}
+                        onChange={e => setMatTitle(e.target.value)}
                         className="w-full px-4 py-2.5 admin-input font-bold text-xs focus:outline-none"
                       />
                     </div>
@@ -1957,22 +2350,20 @@ export default function App() {
                         <button
                           type="button"
                           onClick={() => setUploadMode('link')}
-                          className={`py-1.5 rounded-lg text-[10px] font-black transition ${
-                            uploadMode === 'link'
-                              ? 'bg-yellow-500 text-slate-950 shadow-sm'
-                              : 'text-slate-500 dark:text-slate-400 hover:text-slate-350'
-                          }`}
+                          className={`py-1.5 rounded-lg text-[10px] font-black transition ${uploadMode === 'link'
+                            ? 'bg-yellow-500 text-slate-950 shadow-sm'
+                            : 'text-slate-500 dark:text-slate-400 hover:text-slate-350'
+                            }`}
                         >
                           رابط خارجي (Drive) 🔗
                         </button>
                         <button
                           type="button"
                           onClick={() => setUploadMode('file')}
-                          className={`py-1.5 rounded-lg text-[10px] font-black transition ${
-                            uploadMode === 'file'
-                              ? 'bg-yellow-500 text-slate-950 shadow-sm'
-                              : 'text-slate-500 dark:text-slate-400 hover:text-slate-355'
-                          }`}
+                          className={`py-1.5 rounded-lg text-[10px] font-black transition ${uploadMode === 'file'
+                            ? 'bg-yellow-500 text-slate-950 shadow-sm'
+                            : 'text-slate-500 dark:text-slate-400 hover:text-slate-355'
+                            }`}
                         >
                           رفع ملف PDF مباشر 📁
                         </button>
@@ -1982,19 +2373,19 @@ export default function App() {
                     {uploadMode === 'link' ? (
                       <div>
                         <label className="block text-[10px] font-black text-slate-500 dark:text-slate-400 mb-1">الرابط الأكاديمي (URL)</label>
-                        <input 
-                          type="url" 
+                        <input
+                          type="url"
                           placeholder="https://drive.google.com/..."
                           value={matUrl}
-                          onChange={e=>setMatUrl(e.target.value)}
+                          onChange={e => setMatUrl(e.target.value)}
                           className="w-full px-4 py-2.5 admin-input font-bold text-xs text-left focus:outline-none"
                         />
                       </div>
                     ) : (
                       <div className="space-y-2">
                         <label className="block text-[10px] font-black text-slate-500 dark:text-slate-400 mb-1">اختيار ملف PDF من جهازك</label>
-                        <input 
-                          type="file" 
+                        <input
+                          type="file"
                           accept="application/pdf"
                           onChange={handlePdfChange}
                           className="w-full px-3 py-2 bg-slate-500/5 dark:bg-slate-950/40 border border-[#0e5e6f]/25 dark:border-slate-800 rounded-xl font-bold text-[10px] focus:outline-none text-slate-200"
@@ -2013,21 +2404,21 @@ export default function App() {
                     <div className="grid grid-cols-2 gap-2">
                       <div>
                         <label className="block text-[10px] font-black text-slate-500 dark:text-slate-400 mb-1">الفرقة</label>
-                        <select 
-                          value={profile.role === 'helper' && profile.assignedCohort && profile.assignedCohort !== 'كل الفرق' ? profile.assignedCohort : matCohort} 
-                          onChange={e=>setMatCohort(e.target.value)}
+                        <select
+                          value={profile.role === 'helper' && profile.assignedCohort && profile.assignedCohort !== 'كل الفرق' ? profile.assignedCohort : matCohort}
+                          onChange={e => setMatCohort(e.target.value)}
                           disabled={profile.role === 'helper' && profile.assignedCohort && profile.assignedCohort !== 'كل الفرق'}
                           className="w-full px-3 py-2.5 admin-input font-bold text-xs focus:outline-none disabled:opacity-70"
                         >
-                          {COHORTS.map(c => <option key={c} value={c}>{c}</option>)}
+                          {allowedCohortsForProfile.map(c => <option key={c} value={c}>{c}</option>)}
                         </select>
                       </div>
 
                       <div>
                         <label className="block text-[10px] font-black text-slate-500 dark:text-slate-400 mb-1">التخصص</label>
-                        <select 
-                          value={profile.role === 'helper' && profile.assignedMajor && profile.assignedMajor !== 'كل التخصصات' ? profile.assignedMajor : matMajor} 
-                          onChange={e=>setMatMajor(e.target.value)}
+                        <select
+                          value={profile.role === 'helper' && profile.assignedMajor && profile.assignedMajor !== 'كل التخصصات' ? profile.assignedMajor : matMajor}
+                          onChange={e => setMatMajor(e.target.value)}
                           disabled={profile.role === 'helper' && profile.assignedMajor && profile.assignedMajor !== 'كل التخصصات'}
                           className="w-full px-3 py-2.5 admin-input font-bold text-xs focus:outline-none disabled:opacity-70"
                         >
@@ -2038,9 +2429,9 @@ export default function App() {
 
                     <div>
                       <label className="block text-[10px] font-black text-slate-500 dark:text-slate-400 mb-1">القسم والتصنيف</label>
-                      <select 
-                        value={matType} 
-                        onChange={e=>setMatType(e.target.value)}
+                      <select
+                        value={matType}
+                        onChange={e => setMatType(e.target.value)}
                         className="w-full px-3 py-2.5 admin-input font-bold text-xs focus:outline-none"
                       >
                         <option value="pdf">كتاب أو ملف PDF تفصيلي</option>
@@ -2051,8 +2442,8 @@ export default function App() {
                       </select>
                     </div>
 
-                    <button 
-                      type="submit" 
+                    <button
+                      type="submit"
                       className="w-full py-3 btn-gold text-slate-950 font-black rounded-2xl text-xs shadow-md transition cursor-pointer"
                     >
                       بث وتعميم الملف الدراسي 🍉
@@ -2064,7 +2455,7 @@ export default function App() {
                 {/* Materials List */}
                 <div className="lg:col-span-2 admin-card p-6 overflow-hidden flex flex-col">
                   <h3 className="text-md font-black border-r-4 border-yellow-500 pr-2 mb-4 gradient-text-gold">قائمة المقررات المرفوعة حالياً</h3>
-                  
+
                   <div className="flex-1 overflow-y-auto space-y-3 max-h-[480px] pr-1">
                     {getFilteredMaterials().map((mat) => (
                       <div key={mat.id} className="p-4 bg-slate-500/5 dark:bg-slate-950/40 border border-[#0e5e6f]/10 dark:border-slate-800 rounded-2xl flex items-center justify-between text-xs font-bold transition hover:scale-[1.01]">
@@ -2074,7 +2465,7 @@ export default function App() {
                             الفرقة: {mat.cohort} • التخصص: {mat.major} • التصنيف: {mat.type}
                           </span>
                         </div>
-                        <button 
+                        <button
                           onClick={() => handleDeleteMaterial(mat.id, mat.isChunked, mat.totalChunks)}
                           className="p-2 bg-rose-600/10 hover:bg-rose-600/20 text-rose-600 dark:text-rose-400 rounded-xl transition cursor-pointer"
                         >
@@ -2093,20 +2484,20 @@ export default function App() {
           {currentTab === 'announcements' && (
             <div className="space-y-6 fade-in">
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                
+
                 {/* Form Add Announcement */}
                 <div className="admin-card p-6 space-y-4">
                   <h3 className="text-md font-black border-r-4 border-yellow-500 pr-2 gradient-text-gold">بث إعلان عاجل للطلاب</h3>
-                  
+
                   <form onSubmit={handleAddAnnSubmit} className="space-y-3.5 text-right">
                     <div>
                       <label className="block text-[10px] font-black text-slate-500 dark:text-slate-400 mb-1">نص التنبيه</label>
-                      <textarea 
-                        required 
+                      <textarea
+                        required
                         rows={5}
                         placeholder="اكتب التنبيه الدراسي الهام هنا..."
                         value={annMsg}
-                        onChange={e=>setAnnMsg(e.target.value)}
+                        onChange={e => setAnnMsg(e.target.value)}
                         className="w-full p-3 rounded-xl admin-input font-bold text-xs focus:outline-none resize-none"
                       />
                     </div>
@@ -2114,9 +2505,9 @@ export default function App() {
                     <div className="grid grid-cols-2 gap-2">
                       <div>
                         <label className="block text-[10px] font-black text-slate-500 dark:text-slate-400 mb-1">نوع المنشور</label>
-                        <select 
-                          value={annType} 
-                          onChange={e=>setAnnType(e.target.value)}
+                        <select
+                          value={annType}
+                          onChange={e => setAnnType(e.target.value)}
                           className="w-full px-3 py-2.5 admin-input font-bold text-xs focus:outline-none"
                         >
                           <option value="alert">تنبيه عاجل 🔔</option>
@@ -2126,14 +2517,14 @@ export default function App() {
 
                       <div>
                         <label className="block text-[10px] font-black text-slate-500 dark:text-slate-400 mb-1">الفرقة المستهدفة</label>
-                        <select 
-                          value={profile.role === 'helper' && profile.assignedCohort && profile.assignedCohort !== 'كل الفرق' ? profile.assignedCohort : annCohort} 
-                          onChange={e=>setAnnCohort(e.target.value)}
+                        <select
+                          value={profile.role === 'helper' && profile.assignedCohort && profile.assignedCohort !== 'كل الفرق' ? profile.assignedCohort : annCohort}
+                          onChange={e => setAnnCohort(e.target.value)}
                           disabled={profile.role === 'helper' && profile.assignedCohort && profile.assignedCohort !== 'كل الفرق'}
                           className="w-full px-3 py-2.5 admin-input font-bold text-xs focus:outline-none disabled:opacity-70"
                         >
                           <option value="">جميع الفرق 🌍</option>
-                          {COHORTS.map(c => <option key={c} value={c}>{c}</option>)}
+                          {allowedCohortsForProfile.map(c => <option key={c} value={c}>{c}</option>)}
                         </select>
                       </div>
                     </div>
@@ -2141,9 +2532,9 @@ export default function App() {
                     <div className="grid grid-cols-1 gap-2">
                       <div>
                         <label className="block text-[10px] font-black text-slate-500 dark:text-slate-400 mb-1">التخصص المستهدف</label>
-                        <select 
-                          value={profile.role === 'helper' && profile.assignedMajor && profile.assignedMajor !== 'كل التخصصات' ? profile.assignedMajor : annMajor} 
-                          onChange={e=>setAnnMajor(e.target.value)}
+                        <select
+                          value={profile.role === 'helper' && profile.assignedMajor && profile.assignedMajor !== 'كل التخصصات' ? profile.assignedMajor : annMajor}
+                          onChange={e => setAnnMajor(e.target.value)}
                           disabled={profile.role === 'helper' && profile.assignedMajor && profile.assignedMajor !== 'كل التخصصات'}
                           className="w-full px-3 py-2.5 admin-input font-bold text-xs focus:outline-none disabled:opacity-70"
                         >
@@ -2153,8 +2544,8 @@ export default function App() {
                       </div>
                     </div>
 
-                    <button 
-                      type="submit" 
+                    <button
+                      type="submit"
                       className="w-full py-3 btn-gold text-slate-950 font-black rounded-2xl text-xs shadow-md transition cursor-pointer"
                     >
                       بث ونشر الإعلان فوراً 🔔
@@ -2166,13 +2557,13 @@ export default function App() {
                 {/* Announcements List */}
                 <div className="lg:col-span-2 admin-card p-6 overflow-hidden flex flex-col">
                   <h3 className="text-md font-black border-r-4 border-yellow-500 pr-2 mb-4 gradient-text-gold">قائمة الإعلانات والتبليغات النشطة</h3>
-                  
+
                   <div className="flex-1 overflow-y-auto space-y-3 max-h-[480px] pr-1">
                     {getFilteredAnnouncements().map((ann) => (
                       <div key={ann.id} className="p-4 bg-slate-500/5 dark:bg-slate-950/40 border border-[#0e5e6f]/10 dark:border-slate-800 rounded-2xl space-y-2 text-xs font-bold transition hover:scale-[1.01]">
                         <div className="flex justify-between items-start">
                           <p className="text-[#0e5e6f] dark:text-slate-200 font-extrabold flex-1 leading-relaxed">{ann.msg}</p>
-                          <button 
+                          <button
                             onClick={() => handleDeleteAnnouncement(ann.id)}
                             className="p-1.5 bg-rose-600/10 hover:bg-rose-600/20 text-rose-600 dark:text-rose-400 rounded-xl transition shrink-0 mr-3 cursor-pointer"
                           >
@@ -2196,22 +2587,22 @@ export default function App() {
           {currentTab === 'exams' && (
             <div className="space-y-6 fade-in">
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-                
+
                 {/* Form Exam Parameters & Builder */}
                 <div className="lg:col-span-5 admin-card p-6 space-y-4">
                   <h3 className="text-md font-black border-r-4 border-yellow-500 pr-2 gradient-text-gold">
                     {editingExamId ? 'تعديل الاختبار الأكاديمي الحالي ✏️' : 'صانع الامتحانات وبابل شيت 🎓'}
                   </h3>
-                  
+
                   <form onSubmit={handleCreateExamSubmit} className="space-y-4 text-right">
                     <div>
                       <label className="block text-[10px] font-black text-slate-500 dark:text-slate-400 mb-1">اسم وموضوع الاختبار</label>
-                      <input 
-                        type="text" 
-                        required 
+                      <input
+                        type="text"
+                        required
                         placeholder="مثال: اختبار برمجة 1 تجريبي"
                         value={examTitle}
-                        onChange={e=>setExamTitle(e.target.value)}
+                        onChange={e => setExamTitle(e.target.value)}
                         className="w-full px-4 py-2.5 admin-input font-bold text-xs focus:outline-none"
                       />
                     </div>
@@ -2219,33 +2610,33 @@ export default function App() {
                     <div className="grid grid-cols-3 gap-2">
                       <div>
                         <label className="block text-[10px] font-black text-slate-500 dark:text-slate-400 mb-1">المدة (دقائق)</label>
-                        <input 
-                          type="number" 
-                          required 
+                        <input
+                          type="number"
+                          required
                           placeholder="15"
                           value={examDuration}
-                          onChange={e=>setExamDuration(e.target.value)}
+                          onChange={e => setExamDuration(e.target.value)}
                           className="w-full px-3 py-2.5 admin-input font-bold text-xs focus:outline-none"
                         />
                       </div>
 
                       <div>
                         <label className="block text-[10px] font-black text-slate-500 dark:text-slate-400 mb-1">الفرقة المستهدفة</label>
-                        <select 
-                          value={profile.role === 'helper' && profile.assignedCohort && profile.assignedCohort !== 'كل الفرق' ? profile.assignedCohort : examCohort} 
-                          onChange={e=>setExamCohort(e.target.value)}
+                        <select
+                          value={profile.role === 'helper' && profile.assignedCohort && profile.assignedCohort !== 'كل الفرق' ? profile.assignedCohort : examCohort}
+                          onChange={e => setExamCohort(e.target.value)}
                           disabled={profile.role === 'helper' && profile.assignedCohort && profile.assignedCohort !== 'كل الفرق'}
                           className="w-full px-3 py-2.5 admin-input font-bold text-xs focus:outline-none disabled:opacity-70"
                         >
-                          {COHORTS.map(c => <option key={c} value={c}>{c}</option>)}
+                          {allowedCohortsForProfile.map(c => <option key={c} value={c}>{c}</option>)}
                         </select>
                       </div>
 
                       <div>
                         <label className="block text-[10px] font-black text-slate-500 dark:text-slate-400 mb-1">التخصص المستهدف</label>
-                        <select 
-                          value={profile.role === 'helper' && profile.assignedMajor && profile.assignedMajor !== 'كل التخصصات' ? profile.assignedMajor : examMajor} 
-                          onChange={e=>setExamMajor(e.target.value)}
+                        <select
+                          value={profile.role === 'helper' && profile.assignedMajor && profile.assignedMajor !== 'كل التخصصات' ? profile.assignedMajor : examMajor}
+                          onChange={e => setExamMajor(e.target.value)}
                           disabled={profile.role === 'helper' && profile.assignedMajor && profile.assignedMajor !== 'كل التخصصات'}
                           className="w-full px-3 py-2.5 admin-input font-bold text-xs focus:outline-none disabled:opacity-70"
                         >
@@ -2258,20 +2649,20 @@ export default function App() {
                     <div className="grid grid-cols-2 gap-2">
                       <div>
                         <label className="block text-[10px] font-black text-slate-500 dark:text-slate-400 mb-1">تاريخ ووقت البدء (اختياري)</label>
-                        <input 
-                          type="datetime-local" 
+                        <input
+                          type="datetime-local"
                           value={examStartDate}
-                          onChange={e=>setExamStartDate(e.target.value)}
+                          onChange={e => setExamStartDate(e.target.value)}
                           className="w-full px-4 py-2.5 admin-input font-bold text-xs focus:outline-none"
                         />
                       </div>
 
                       <div>
                         <label className="block text-[10px] font-black text-slate-500 dark:text-slate-400 mb-1">تاريخ ووقت الانتهاء (اختياري)</label>
-                        <input 
-                          type="datetime-local" 
+                        <input
+                          type="datetime-local"
                           value={examEndDate}
-                          onChange={e=>setExamEndDate(e.target.value)}
+                          onChange={e => setExamEndDate(e.target.value)}
                           className="w-full px-4 py-2.5 admin-input font-bold text-xs focus:outline-none"
                         />
                       </div>
@@ -2280,14 +2671,14 @@ export default function App() {
                     {/* Question Builder Module */}
                     <div className="border-t border-[#0e5e6f]/10 dark:border-slate-800 pt-4 space-y-3">
                       <h4 className="text-xs font-black text-yellow-600 dark:text-yellow-400">إضافة سؤال جديد للاختبار:</h4>
-                      
+
                       <div>
                         <label className="block text-[9px] font-black text-slate-500 dark:text-slate-400 mb-1">نص السؤال</label>
-                        <textarea 
+                        <textarea
                           rows={2}
                           placeholder="اكتب السؤال بالتفصيل هنا..."
                           value={qText}
-                          onChange={e=>setQText(e.target.value)}
+                          onChange={e => setQText(e.target.value)}
                           className="w-full p-2.5 rounded-xl admin-input font-bold text-xs focus:outline-none resize-none"
                         />
                       </div>
@@ -2295,9 +2686,9 @@ export default function App() {
                       <div className="grid grid-cols-2 gap-2">
                         <div>
                           <label className="block text-[9px] font-black text-slate-500 dark:text-slate-400 mb-1">نوع السؤال</label>
-                          <select 
-                            value={qType} 
-                            onChange={e=>setQType(e.target.value)}
+                          <select
+                            value={qType}
+                            onChange={e => setQType(e.target.value)}
                             className="w-full px-2 py-2 rounded-xl admin-input font-bold text-[10px] focus:outline-none"
                           >
                             <option value="mcq">اختيار من متعدد MCQ</option>
@@ -2310,9 +2701,9 @@ export default function App() {
                           <div>
                             <label className="block text-[9px] font-black text-slate-500 dark:text-slate-400 mb-1">الجواب الصحيح</label>
                             {qType === 'mcq' ? (
-                              <select 
-                                value={qCorrect} 
-                                onChange={e=>setQCorrect(e.target.value)}
+                              <select
+                                value={qCorrect}
+                                onChange={e => setQCorrect(e.target.value)}
                                 className="w-full px-2 py-2 rounded-xl admin-input font-bold text-[10px] focus:outline-none"
                               >
                                 <option value={0}>الخيار الأول (أ)</option>
@@ -2321,9 +2712,9 @@ export default function App() {
                                 <option value={3}>الخيار الرابع (د)</option>
                               </select>
                             ) : (
-                              <select 
-                                value={qCorrect} 
-                                onChange={e=>setQCorrect(e.target.value)}
+                              <select
+                                value={qCorrect}
+                                onChange={e => setQCorrect(e.target.value)}
                                 className="w-full px-2 py-2 rounded-xl admin-input font-bold text-[10px] focus:outline-none"
                               >
                                 <option value={0}>صح ✅</option>
@@ -2336,39 +2727,39 @@ export default function App() {
 
                       {qType === 'mcq' && (
                         <div className="grid grid-cols-2 gap-2">
-                          <input 
-                            type="text" 
+                          <input
+                            type="text"
                             placeholder="خيار أ"
                             value={qOptA}
-                            onChange={e=>setQOptA(e.target.value)}
+                            onChange={e => setQOptA(e.target.value)}
                             className="px-2.5 py-1.5 rounded-lg admin-input font-bold text-[10px] focus:outline-none"
                           />
-                          <input 
-                            type="text" 
+                          <input
+                            type="text"
                             placeholder="خيار ب"
                             value={qOptB}
-                            onChange={e=>setQOptB(e.target.value)}
+                            onChange={e => setQOptB(e.target.value)}
                             className="px-2.5 py-1.5 rounded-lg admin-input font-bold text-[10px] focus:outline-none"
                           />
-                          <input 
-                            type="text" 
+                          <input
+                            type="text"
                             placeholder="خيار ج"
                             value={qOptC}
-                            onChange={e=>setQOptC(e.target.value)}
+                            onChange={e => setQOptC(e.target.value)}
                             className="px-2.5 py-1.5 rounded-lg admin-input font-bold text-[10px] focus:outline-none"
                           />
-                          <input 
-                            type="text" 
+                          <input
+                            type="text"
                             placeholder="خيار د"
                             value={qOptD}
-                            onChange={e=>setQOptD(e.target.value)}
+                            onChange={e => setQOptD(e.target.value)}
                             className="px-2.5 py-1.5 rounded-lg admin-input font-bold text-[10px] focus:outline-none"
                           />
                         </div>
                       )}
 
-                       <div className="flex gap-2">
-                        <button 
+                      <div className="flex gap-2">
+                        <button
                           type="button"
                           onClick={handleAddQuestionToExam}
                           className="grow py-2.5 btn-teal text-white font-black rounded-xl text-[10px] transition active:scale-95 shadow-sm cursor-pointer"
@@ -2376,7 +2767,7 @@ export default function App() {
                           {editingQuestionIdx !== null ? '✏️ تحديث تعديل السؤال' : '➕ إضافة السؤال الحالي لقائمة الامتحان'}
                         </button>
                         {editingQuestionIdx !== null && (
-                          <button 
+                          <button
                             type="button"
                             onClick={() => {
                               setEditingQuestionIdx(null);
@@ -2395,8 +2786,8 @@ export default function App() {
                       </div>
                     </div>
 
-                    <button 
-                      type="submit" 
+                    <button
+                      type="submit"
                       className="w-full py-3 btn-gold text-slate-950 font-black rounded-2xl text-xs shadow-md transition cursor-pointer"
                     >
                       {editingExamId ? 'تحديث وحفظ تعديلات الاختبار ✏️' : 'حفظ ونشر الامتحان النهائي 🎓'}
@@ -2423,7 +2814,7 @@ export default function App() {
 
                 {/* Exam List & Live Questions Previews */}
                 <div className="lg:col-span-7 space-y-6">
-                  
+
                   {/* Temp Question List */}
                   {examQuestions.length > 0 && (
                     <div className="admin-card p-6 space-y-3">
@@ -2432,14 +2823,13 @@ export default function App() {
                       </h3>
                       <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1">
                         {examQuestions.map((eq, idx) => (
-                          <div key={idx} className={`p-3 border rounded-xl text-[10px] font-bold flex justify-between items-center gap-3 transition ${
-                            editingQuestionIdx === idx 
-                              ? 'bg-yellow-500/10 border-yellow-500/30' 
-                              : 'bg-slate-500/5 dark:bg-slate-950/40 border-[#0e5e6f]/10 dark:border-slate-800'
-                          }`}>
+                          <div key={idx} className={`p-3 border rounded-xl text-[10px] font-bold flex justify-between items-center gap-3 transition ${editingQuestionIdx === idx
+                            ? 'bg-yellow-500/10 border-yellow-500/30'
+                            : 'bg-slate-500/5 dark:bg-slate-950/40 border-[#0e5e6f]/10 dark:border-slate-800'
+                            }`}>
                             <div className="grow space-y-1">
                               <div>
-                                <span className="text-yellow-600 dark:text-yellow-400 font-black">س {idx + 1}: </span> {eq.q} 
+                                <span className="text-yellow-600 dark:text-yellow-400 font-black">س {idx + 1}: </span> {eq.q}
                                 <span className="text-[9px] text-[#0e5e6f] dark:text-[#bfebd4] mr-2">
                                   ({eq.type === 'mcq' ? 'اختيار متعدد' : eq.type === 'tf' ? 'صح/خطأ' : 'سؤال مقالي'})
                                 </span>
@@ -2457,19 +2847,18 @@ export default function App() {
                               )}
                             </div>
                             <div className="flex gap-1.5 shrink-0">
-                              <button 
+                              <button
                                 type="button"
                                 onClick={() => handleStartEditQuestion(idx)}
-                                className={`p-1.5 rounded-lg transition cursor-pointer ${
-                                  editingQuestionIdx === idx 
-                                    ? 'bg-yellow-500 text-slate-950' 
-                                    : 'bg-yellow-600/10 hover:bg-yellow-600/20 text-yellow-600 dark:text-yellow-400'
-                                }`}
+                                className={`p-1.5 rounded-lg transition cursor-pointer ${editingQuestionIdx === idx
+                                  ? 'bg-yellow-500 text-slate-950'
+                                  : 'bg-yellow-600/10 hover:bg-yellow-600/20 text-yellow-600 dark:text-yellow-400'
+                                  }`}
                                 title="تعديل هذا السؤال"
                               >
                                 <Edit3 size={11} />
                               </button>
-                              <button 
+                              <button
                                 type="button"
                                 onClick={() => handleRemoveQuestion(idx)}
                                 className="p-1.5 bg-rose-600/10 hover:bg-rose-600/20 text-rose-600 dark:text-rose-400 rounded-lg transition cursor-pointer"
@@ -2487,13 +2876,13 @@ export default function App() {
                   {/* Active Published Exams List */}
                   <div className="admin-card p-6 overflow-hidden flex flex-col">
                     <h3 className="text-md font-black border-r-4 border-yellow-500 pr-2 mb-4 gradient-text-gold">قائمة الاختبارات النشطة بالمنصة</h3>
-                    
+
                     <div className="overflow-y-auto space-y-3 max-h-[300px] pr-1">
                       {getFilteredExams().map((exam) => (
                         <div key={exam.id} className="p-3.5 bg-slate-500/5 dark:bg-slate-950/40 border border-[#0e5e6f]/10 dark:border-slate-800 rounded-2xl flex items-center justify-between text-xs font-bold transition hover:scale-[1.01]">
                           <div>
                             <span className="block font-black text-[#0e5e6f] dark:text-slate-200">{exam.title}</span>
-                             <span className="text-[10px] text-slate-500 dark:text-slate-400">
+                            <span className="text-[10px] text-slate-500 dark:text-slate-400">
                               الفرقة: {exam.cohort} • التخصص: {exam.major || 'كل التخصصات'} • مدة الاختبار: {exam.duration} دقيقة • عدد الأسئلة: {exam.questions?.length || 0}
                             </span>
                             {(exam.startDate || exam.endDate) && (
@@ -2504,7 +2893,7 @@ export default function App() {
                             )}
                           </div>
                           <div className="flex gap-2">
-                            <button 
+                            <button
                               onClick={() => {
                                 setEditingExamId(exam.id);
                                 setExamTitle(exam.title || '');
@@ -2521,15 +2910,15 @@ export default function App() {
                             >
                               <Edit3 size={14} />
                             </button>
-                            <button 
+                            <button
                               onClick={() => handleDeleteExam(exam.id)}
                               className="p-2 bg-rose-600/10 hover:bg-rose-600/20 text-rose-600 dark:text-rose-400 rounded-xl transition cursor-pointer"
                             >
-                            <Trash2 size={14} />
-                          </button>
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      ))}
                     </div>
                   </div>
 
@@ -2543,13 +2932,13 @@ export default function App() {
           {currentTab === 'results' && (
             <div className="space-y-6 fade-in text-right">
               <h2 className="text-xl font-black border-r-4 border-yellow-500 pr-3 gradient-text-gold">نتائج الطلاب ورصد وتصحيح الأسئلة المقالية</h2>
-              
+
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-                
+
                 {/* Right side: Submissions List */}
                 <div className={`admin-card p-6 overflow-hidden flex flex-col ${selectedSub ? 'lg:col-span-6' : 'lg:col-span-12'}`}>
                   <h3 className="text-md font-black border-r-4 border-yellow-500 pr-2 mb-4 gradient-text-gold">سجل تسليمات الطلاب والأوراق الإجابة</h3>
-                  
+
                   <div className="overflow-x-auto">
                     <table className="admin-table text-xs text-right">
                       <thead className="text-[#0e5e6f] dark:text-[#bfebd4] font-black">
@@ -2580,11 +2969,10 @@ export default function App() {
                                 {sub.finalScore !== undefined ? sub.finalScore : sub.score} / {sub.total}
                               </td>
                               <td className="p-4">
-                                <span className={`px-2 py-0.5 rounded-full text-[9px] font-black border ${
-                                  sub.status === 'pending'
-                                    ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20'
-                                    : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
-                                }`}>
+                                <span className={`px-2 py-0.5 rounded-full text-[9px] font-black border ${sub.status === 'pending'
+                                  ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20'
+                                  : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
+                                  }`}>
                                   {sub.status === 'pending' ? 'بانتظار تصحيح المقالي ⏳' : 'مصحح ومعتمد 🏆'}
                                 </span>
                               </td>
@@ -2656,7 +3044,7 @@ export default function App() {
                         return examDetails.questions.map((q, idx) => {
                           const isEssay = q.type === 'essay' || !q.options || q.options.length === 0;
                           const studentAnswer = selectedSub.answersSubmitted[idx];
-                          
+
                           return (
                             <div key={idx} className="p-3 bg-slate-500/5 dark:bg-slate-950/40 border border-[#0e5e6f]/10 dark:border-slate-800 rounded-xl space-y-2 text-xs">
                               <div className="flex justify-between items-start gap-3 font-black">
@@ -2673,7 +3061,7 @@ export default function App() {
 
                                   <div className="flex items-center gap-3 pt-2">
                                     <label className="text-[10px] font-black text-slate-500">رصد درجة هذا السؤال المقالي:</label>
-                                    <input 
+                                    <input
                                       type="number"
                                       min="0"
                                       placeholder="0"
@@ -2699,16 +3087,16 @@ export default function App() {
                     <form onSubmit={handleSubmitEssayGrading} className="space-y-3 pt-3 border-t border-slate-850/20">
                       <div>
                         <label className="block text-[10px] font-black text-slate-500 dark:text-slate-400 mb-1">ملحوظة المصحح وتقييمه الكلي للطالب</label>
-                        <textarea 
+                        <textarea
                           rows={2}
                           placeholder="اكتب تعليق التقييم أو التغذية الراجعة للطالب هنا..."
                           value={essayFeedbackText}
-                          onChange={e=>setEssayFeedbackText(e.target.value)}
+                          onChange={e => setEssayFeedbackText(e.target.value)}
                           className="w-full p-2.5 rounded-xl admin-input font-bold text-xs focus:outline-none resize-none"
                         />
                       </div>
 
-                      <button 
+                      <button
                         type="submit"
                         className="w-full py-3 btn-gold text-slate-950 font-black rounded-2xl text-xs shadow-md transition cursor-pointer"
                       >
@@ -2726,21 +3114,21 @@ export default function App() {
           {currentTab === 'schedules' && (
             <div className="space-y-6 fade-in text-right">
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-                
+
                 {/* Add Schedule Form */}
                 <div className="lg:col-span-4 admin-card p-6 space-y-4">
                   <h3 className="text-md font-black border-r-4 border-yellow-500 pr-2 gradient-text-gold">
                     إضافة وتعميم جدول امتحانات جديد 📅
                   </h3>
-                  
+
                   <form onSubmit={handleAddScheduleSubmit} className="space-y-4">
                     <div>
                       <label className="block text-[10px] font-black text-slate-500 dark:text-slate-400 mb-1">اسم/عنوان الجدول (مثال: ميدتيرم الفرقة الأولى)</label>
-                      <input 
-                        type="text" 
-                        required 
+                      <input
+                        type="text"
+                        required
                         value={schedTitle}
-                        onChange={e=>setSchedTitle(e.target.value)}
+                        onChange={e => setSchedTitle(e.target.value)}
                         className="w-full px-4 py-2.5 admin-input font-bold text-xs focus:outline-none"
                       />
                     </div>
@@ -2748,9 +3136,9 @@ export default function App() {
                     <div className="grid grid-cols-2 gap-2">
                       <div>
                         <label className="block text-[10px] font-black text-slate-500 dark:text-slate-400 mb-1">نوع الامتحانات</label>
-                        <select 
-                          value={schedType} 
-                          onChange={e=>setSchedType(e.target.value)}
+                        <select
+                          value={schedType}
+                          onChange={e => setSchedType(e.target.value)}
                           className="w-full px-3 py-2.5 admin-input font-bold text-xs focus:outline-none"
                         >
                           <option value="midterm">ميدتيرم (Midterm)</option>
@@ -2761,21 +3149,21 @@ export default function App() {
 
                       <div>
                         <label className="block text-[10px] font-black text-slate-500 dark:text-slate-400 mb-1">الفرقة المستهدفة</label>
-                        <select 
-                          value={schedCohort} 
-                          onChange={e=>setSchedCohort(e.target.value)}
+                        <select
+                          value={schedCohort}
+                          onChange={e => setSchedCohort(e.target.value)}
                           className="w-full px-3 py-2.5 admin-input font-bold text-xs focus:outline-none"
                         >
-                          {COHORTS.map(c => <option key={c} value={c}>{c}</option>)}
+                          {allowedCohortsForProfile.map(c => <option key={c} value={c}>{c}</option>)}
                         </select>
                       </div>
                     </div>
 
                     <div>
                       <label className="block text-[10px] font-black text-slate-500 dark:text-slate-400 mb-1">التخصص المستهدف</label>
-                      <select 
-                        value={schedMajor} 
-                        onChange={e=>setSchedMajor(e.target.value)}
+                      <select
+                        value={schedMajor}
+                        onChange={e => setSchedMajor(e.target.value)}
                         className="w-full px-3 py-2.5 admin-input font-bold text-xs focus:outline-none"
                       >
                         <option value="كل التخصصات">كل التخصصات 🎓</option>
@@ -2785,11 +3173,11 @@ export default function App() {
 
                     <div>
                       <label className="block text-[10px] font-black text-slate-500 dark:text-slate-400 mb-1">ملاحظات وقواعد للامتحان (اختياري)</label>
-                      <textarea 
+                      <textarea
                         rows={2}
                         placeholder="اكتب التنبيهات مثل: الحضور قبل اللجنة بنصف ساعة، يمنع اصطحاب الموبايل..."
                         value={schedNotes}
-                        onChange={e=>setSchedNotes(e.target.value)}
+                        onChange={e => setSchedNotes(e.target.value)}
                         className="w-full p-3 rounded-xl admin-input font-bold text-xs focus:outline-none resize-none"
                       />
                     </div>
@@ -2798,23 +3186,23 @@ export default function App() {
                       <div className="flex items-center justify-between">
                         <h4 className="text-xs font-black text-yellow-600 dark:text-yellow-400">إدراج مواد الجدول:</h4>
                         <div className="flex items-center gap-2">
-                          <input 
-                            type="file" 
-                            accept=".xlsx, .xls" 
-                            className="hidden" 
+                          <input
+                            type="file"
+                            accept=".xlsx, .xls"
+                            className="hidden"
                             ref={excelInputRef}
                             onChange={handleUploadExcel}
                           />
-                          <button 
-                            type="button" 
+                          <button
+                            type="button"
                             onClick={handleDownloadExcelTemplate}
                             className="px-3 py-1.5 bg-[#0e5e6f]/10 text-[#0e5e6f] dark:text-[#bfebd4] hover:bg-[#0e5e6f]/20 rounded-lg flex items-center gap-1 transition text-[9px]"
                             title="تحميل قالب الإكسيل"
                           >
                             <DownloadCloud size={12} /> تحميل القالب
                           </button>
-                          <button 
-                            type="button" 
+                          <button
+                            type="button"
                             onClick={() => excelInputRef.current?.click()}
                             className="px-3 py-1.5 bg-emerald-500 text-white hover:bg-emerald-600 rounded-lg flex items-center gap-1 transition shadow-sm text-[9px]"
                             title="رفع من ملف إكسيل"
@@ -2823,34 +3211,34 @@ export default function App() {
                           </button>
                         </div>
                       </div>
-                      
+
                       <div className="grid grid-cols-2 gap-2">
                         <div>
                           <label className="block text-[9px] font-black text-slate-500 dark:text-slate-400 mb-1">تاريخ ووقت اللجنة</label>
-                          <input 
-                            type="text" 
+                          <input
+                            type="text"
                             placeholder="مثال: الثلاثاء 25/5 12:00PM"
                             value={schedExamDate}
-                            onChange={e=>setSchedExamDate(e.target.value)}
+                            onChange={e => setSchedExamDate(e.target.value)}
                             className="w-full px-2.5 py-2 rounded-xl admin-input font-bold text-[10px] focus:outline-none"
                           />
                         </div>
                         <div>
                           <label className="block text-[9px] font-black text-slate-500 dark:text-slate-400 mb-1">اسم المقرر/المادة</label>
-                          <input 
-                            type="text" 
+                          <input
+                            type="text"
                             placeholder="مثال: هندسة برمجيات"
                             value={schedExamSubject}
-                            onChange={e=>setSchedExamSubject(e.target.value)}
+                            onChange={e => setSchedExamSubject(e.target.value)}
                             className="w-full px-2.5 py-2 rounded-xl admin-input font-bold text-[10px] focus:outline-none"
                           />
                         </div>
                       </div>
-                      
-                      <button 
+
+                      <button
                         type="button"
                         onClick={() => {
-                          if(!schedExamDate || !schedExamSubject) return;
+                          if (!schedExamDate || !schedExamSubject) return;
                           setSchedExams([...schedExams, { date: schedExamDate, subject: schedExamSubject }]);
                           setSchedExamDate('');
                           setSchedExamSubject('');
@@ -2874,8 +3262,8 @@ export default function App() {
                       )}
                     </div>
 
-                    <button 
-                      type="submit" 
+                    <button
+                      type="submit"
                       className="w-full py-3.5 btn-gold text-slate-950 font-black rounded-2xl text-xs shadow-md transition cursor-pointer"
                     >
                       حفظ واعتماد الجدول نهائياً 🚀
@@ -2887,7 +3275,7 @@ export default function App() {
                 {/* Schedules List */}
                 <div className="lg:col-span-8 admin-card p-6 overflow-hidden flex flex-col">
                   <h3 className="text-md font-black border-r-4 border-yellow-500 pr-2 mb-4 gradient-text-gold">الجداول الدراسية المضافة والموثقة</h3>
-                  
+
                   <div className="flex-1 overflow-y-auto space-y-4 max-h-[600px] pr-1">
                     {schedules.map((sched) => (
                       <div key={sched.id} className="p-4 bg-slate-500/5 dark:bg-slate-950/40 border border-[#0e5e6f]/10 dark:border-slate-800 rounded-2xl transition hover:scale-[1.01] space-y-3">
@@ -2901,22 +3289,21 @@ export default function App() {
                               <span className="bg-slate-200 dark:bg-slate-800 px-2 py-0.5 rounded-md">بواسطة: {sched.addedBy}</span>
                             </span>
                           </div>
-                          
+
                           <div className="flex gap-2 shrink-0">
-                            <button 
+                            <button
                               onClick={() => handleToggleScheduleVisibility(sched.id, sched.visible)}
-                              className={`p-2 rounded-xl transition cursor-pointer text-white font-bold flex items-center gap-1.5 text-[10px] ${
-                                sched.visible 
-                                  ? 'bg-amber-500 hover:bg-amber-600 shadow-md' 
-                                  : 'bg-emerald-500 hover:bg-emerald-600 shadow-md'
-                              }`}
+                              className={`p-2 rounded-xl transition cursor-pointer text-white font-bold flex items-center gap-1.5 text-[10px] ${sched.visible
+                                ? 'bg-amber-500 hover:bg-amber-600 shadow-md'
+                                : 'bg-emerald-500 hover:bg-emerald-600 shadow-md'
+                                }`}
                               title={sched.visible ? "إخفاء الجدول مؤقتاً عن الطلاب" : "إظهار الجدول للطلاب"}
                             >
-                              {sched.visible ? <EyeOff size={14}/> : <Eye size={14}/>}
+                              {sched.visible ? <EyeOff size={14} /> : <Eye size={14} />}
                               {sched.visible ? 'إخفاء مؤقت' : 'تفعيل وإظهار'}
                             </button>
 
-                            <button 
+                            <button
                               onClick={() => handleDeleteSchedule(sched.id)}
                               className="p-2 bg-rose-600/10 hover:bg-rose-600/20 text-rose-600 dark:text-rose-400 rounded-xl transition cursor-pointer"
                               title="حذف الجدول نهائياً"
@@ -2933,22 +3320,22 @@ export default function App() {
                         )}
 
                         <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 overflow-hidden">
-                           <table className="w-full text-[10px] font-bold text-right">
-                             <thead className="bg-slate-50 dark:bg-slate-800/50 text-slate-500">
-                               <tr>
-                                 <th className="p-2.5 border-b border-slate-200 dark:border-slate-700">تاريخ ووقت اللجنة</th>
-                                 <th className="p-2.5 border-b border-slate-200 dark:border-slate-700">المقرر / المادة</th>
-                               </tr>
-                             </thead>
-                             <tbody>
-                               {sched.exams && sched.exams.map((ex, i) => (
-                                 <tr key={i} className="border-b last:border-0 border-slate-100 dark:border-slate-800">
-                                   <td className="p-2.5 text-[#0e5e6f] dark:text-[#bfebd4]">{ex.date}</td>
-                                   <td className="p-2.5 text-slate-700 dark:text-slate-300">{ex.subject}</td>
-                                 </tr>
-                               ))}
-                             </tbody>
-                           </table>
+                          <table className="w-full text-[10px] font-bold text-right">
+                            <thead className="bg-slate-50 dark:bg-slate-800/50 text-slate-500">
+                              <tr>
+                                <th className="p-2.5 border-b border-slate-200 dark:border-slate-700">تاريخ ووقت اللجنة</th>
+                                <th className="p-2.5 border-b border-slate-200 dark:border-slate-700">المقرر / المادة</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {sched.exams && sched.exams.map((ex, i) => (
+                                <tr key={i} className="border-b last:border-0 border-slate-100 dark:border-slate-800">
+                                  <td className="p-2.5 text-[#0e5e6f] dark:text-[#bfebd4]">{ex.date}</td>
+                                  <td className="p-2.5 text-slate-700 dark:text-slate-300">{ex.subject}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
                         </div>
 
                       </div>
@@ -2974,7 +3361,7 @@ export default function App() {
                   <Check size={14} /> يتم تنظيف السجلات تلقائياً كل 7 أيام
                 </div>
               </div>
-              
+
               <div className="admin-card p-6 overflow-hidden flex flex-col">
                 <div className="overflow-x-auto">
                   <table className="admin-table text-xs text-right">
@@ -3037,7 +3424,7 @@ export default function App() {
                 {modalConfig.title}
               </h3>
             </div>
-            
+
             <p className="text-xs font-bold text-slate-700 dark:text-slate-300 leading-relaxed">
               {modalConfig.message}
             </p>
@@ -3082,7 +3469,7 @@ export default function App() {
 
             {/* Form inputs */}
             <div className="space-y-4">
-              
+
               {/* Reason Input */}
               <div className="space-y-1.5">
                 <label className="block text-[11px] font-black text-slate-650 dark:text-slate-400">
@@ -3106,22 +3493,20 @@ export default function App() {
                   <button
                     type="button"
                     onClick={() => setBanModalConfig(prev => ({ ...prev, banType: 'temp' }))}
-                    className={`py-2.5 rounded-xl text-xs font-black transition cursor-pointer border flex items-center justify-center gap-1.5 ${
-                      banModalConfig.banType === 'temp'
-                        ? 'bg-amber-600/10 border-amber-500/30 text-amber-600 dark:text-amber-400 font-extrabold'
-                        : 'bg-slate-500/5 border-slate-300/30 text-slate-550 dark:text-slate-450 hover:bg-slate-500/10'
-                    }`}
+                    className={`py-2.5 rounded-xl text-xs font-black transition cursor-pointer border flex items-center justify-center gap-1.5 ${banModalConfig.banType === 'temp'
+                      ? 'bg-amber-600/10 border-amber-500/30 text-amber-600 dark:text-amber-400 font-extrabold'
+                      : 'bg-slate-500/5 border-slate-300/30 text-slate-550 dark:text-slate-450 hover:bg-slate-500/10'
+                      }`}
                   >
                     ⏳ إيقاف وحظر مؤقت
                   </button>
                   <button
                     type="button"
                     onClick={() => setBanModalConfig(prev => ({ ...prev, banType: 'perm' }))}
-                    className={`py-2.5 rounded-xl text-xs font-black transition cursor-pointer border flex items-center justify-center gap-1.5 ${
-                      banModalConfig.banType === 'perm'
-                        ? 'bg-red-600/10 border-red-500/30 text-red-650 dark:text-red-400 font-extrabold'
-                        : 'bg-slate-500/5 border-slate-300/30 text-slate-550 dark:text-slate-450 hover:bg-slate-500/10'
-                    }`}
+                    className={`py-2.5 rounded-xl text-xs font-black transition cursor-pointer border flex items-center justify-center gap-1.5 ${banModalConfig.banType === 'perm'
+                      ? 'bg-red-600/10 border-red-500/30 text-red-650 dark:text-red-400 font-extrabold'
+                      : 'bg-slate-500/5 border-slate-300/30 text-slate-550 dark:text-slate-450 hover:bg-slate-500/10'
+                      }`}
                   >
                     ⛔ حظر أبدي ونهائي
                   </button>
@@ -3142,7 +3527,7 @@ export default function App() {
                       onChange={(e) => setBanModalConfig(prev => ({ ...prev, durationHours: e.target.value }))}
                       className="w-24 px-3 py-1.5 rounded-lg border border-amber-500/25 bg-white/40 dark:bg-slate-950/40 text-xs font-black focus:outline-none"
                     />
-                    
+
                     {/* Pre-defined hours quick selectors */}
                     <div className="flex-1 flex gap-1 justify-end">
                       {['6', '24', '72', '168'].map(hrs => (
@@ -3150,11 +3535,10 @@ export default function App() {
                           key={hrs}
                           type="button"
                           onClick={() => setBanModalConfig(prev => ({ ...prev, durationHours: hrs }))}
-                          className={`px-2 py-1 rounded-md text-[10px] font-bold border transition ${
-                            banModalConfig.durationHours === hrs
-                              ? 'bg-amber-650 border-amber-600 text-slate-900 dark:text-slate-100 font-extrabold'
-                              : 'bg-white/40 dark:bg-slate-900/30 border-slate-300/20 text-slate-650 dark:text-slate-400 hover:bg-slate-500/10'
-                          }`}
+                          className={`px-2 py-1 rounded-md text-[10px] font-bold border transition ${banModalConfig.durationHours === hrs
+                            ? 'bg-amber-650 border-amber-600 text-slate-900 dark:text-slate-100 font-extrabold'
+                            : 'bg-white/40 dark:bg-slate-900/30 border-slate-300/20 text-slate-650 dark:text-slate-400 hover:bg-slate-500/10'
+                            }`}
                         >
                           {hrs === '6' ? '6 س' : hrs === '24' ? 'يوم' : hrs === '72' ? '3 أيام' : 'أسبوع'}
                         </button>
